@@ -26,9 +26,9 @@ final class ChatUi {
     }
     private static Component number(long n) { return Component.literal(Long.toString(n)).withStyle(s -> s.withColor(ORANGE)); }
     static Component pity(PlayerStore.Data data, int pity, boolean busy) {
-        return Component.literal("连续未获 S：").withStyle(ChatFormatting.YELLOW)
+        return Component.literal("连续未获S：").withStyle(ChatFormatting.YELLOW)
                 .append(number(data.misses)).append(" 抽；最多再抽 ").append(number(Math.max(1, pity - data.misses)))
-                .append(" 次必得 S。累计 ").append(number(data.totalDraws)).append(" 抽。")
+                .append(" 次必得S。累计 ").append(number(data.totalDraws)).append(" 抽。")
                 .append(busy ? "（包含当前已确定的结果）" : "");
     }
     static Component result(List<PlayerStore.Draw> draws) {
@@ -55,15 +55,15 @@ final class ChatUi {
         if (page < 1 || page > pages) throw new IllegalArgumentException("页码超出范围，共 " + pages + " 页。");
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽（时间：北京时间）").withStyle(ChatFormatting.GOLD));
-        lines.add(Component.literal("“距上次 S”从上次获得 S 后计数，获 S 当抽显示本轮抽数。").withStyle(ChatFormatting.GRAY));
+        lines.add(Component.literal("“距上次S”从上次获得S后计数，获S当抽显示本轮抽数。").withStyle(ChatFormatting.GRAY));
         int offset = (page - 1) * 10;
         for (int i = offset; i < Math.min(rows.size(), offset + 10L); i++) {
             var row = rows.get(rows.size() - 1 - i); var draw = row.draw();
-            String flags = draw.hardPity ? " · S 保底" : "";
+            String flags = "";
             if (row.receipt().actions.stream().anyMatch(a -> a.status == PlayerStore.Status.FAILED || a.status == PlayerStore.Status.SENDING)) flags += " · 发奖需核查";
             else if (row.receipt().actions.stream().anyMatch(a -> a.status == PlayerStore.Status.READY)) flags += " · 待发放";
             lines.add(Component.literal("#" + draw.number + " [" + draw.tier + "] " + draw.label).withStyle(color(draw.tier))
-                    .append(Component.literal(flags + " · 距上次 S：第 " + row.sinceS() + " 抽 · "
+                    .append(Component.literal(flags + " · 距上次S第" + row.sinceS() + "抽 · "
                             + TIME.format(Instant.parse(row.receipt().timestamp)) + " · " + row.receipt().pool).withStyle(ChatFormatting.GRAY)));
         }
         if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));

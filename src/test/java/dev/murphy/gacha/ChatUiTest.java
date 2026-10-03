@@ -46,9 +46,9 @@ class ChatUiTest {
         var first = ChatUi.history(data, 1); var second = ChatUi.history(data, 2);
         assertEquals(10, first.stream().filter(c -> c.getString().startsWith("#")).count());
         assertEquals(2, second.stream().filter(c -> c.getString().startsWith("#")).count());
-        assertTrue(first.get(2).getString().contains("距上次 S：第 5 抽"));
-        assertTrue(second.get(2).getString().contains("距上次 S：第 2 抽"));
-        assertTrue(first.stream().anyMatch(c -> c.getString().contains("S 保底")));
+        assertTrue(first.get(2).getString().contains("距上次S第5抽"));
+        assertTrue(second.get(2).getString().contains("距上次S第2抽"));
+        assertFalse(first.stream().anyMatch(c -> c.getString().contains("S 保底")));
         assertFalse(first.stream().anyMatch(c -> c.getString().contains("十连末抽保底")));
         assertThrows(IllegalArgumentException.class, () -> ChatUi.history(data, 3));
         assertNull(first.getLast().getSiblings().getFirst().getStyle().getClickEvent());
@@ -67,6 +67,8 @@ class ChatUiTest {
     @Test void pityUsesYellowWordsOrangeNumbersAndResultsUseIndividualTierColors() {
         var data = new PlayerStore.Data(); data.misses = 12; data.totalDraws = 123;
         var pity = ChatUi.pity(data, 80, true);
+        assertTrue(pity.getString().startsWith("连续未获S："));
+        assertTrue(pity.getString().contains("次必得S。"));
         var spans = spans(pity);
         assertEquals(List.of("12", "68", "123"), spans.stream().filter(s -> s.color == ChatUi.ORANGE).map(Span::text).toList());
         assertTrue(spans.stream().filter(s -> !s.text.matches("\\d+")).allMatch(s -> s.color == 0xFFFF55));

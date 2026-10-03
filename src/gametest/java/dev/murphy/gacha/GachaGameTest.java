@@ -167,7 +167,7 @@ public final class GachaGameTest {
             helper.assertTrue(next instanceof net.minecraft.network.chat.ClickEvent.Custom, "next page uses custom click, avoiding command confirmation");
             click(first[0], (net.minecraft.network.chat.ClickEvent.Custom) next);
             helper.assertTrue(first[0].messages.stream().filter(m -> m.getString().startsWith("#")).count() == 1, "second page has the remaining draw");
-            helper.assertTrue(first[0].saw("第 2/2 页") && first[0].saw("距上次 S：第 1 抽"), "real custom packet opens sender history with pity-cycle count");
+            helper.assertTrue(first[0].saw("第 2/2 页") && first[0].saw("距上次S第1抽"), "real custom packet opens sender history with pity-cycle count");
         }));
         helper.runAtTickTime(274, () -> {
             var previous = first[0].messages.getLast().getSiblings().getFirst().getStyle().getClickEvent();
