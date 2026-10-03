@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "gacha-test",
+  "version": "1.0.0",
+  "name": "Gacha Game Tests",
+  "environment": "server",
+  "entrypoints": {
+    "fabric-gametest": ["dev.murphy.gacha.GachaGameTest"],
+    "server": ["dev.murphy.gacha.FujiIntegrationTest"]
+  },
+  "depends": {"gacha": "*", "fabric-gametest-api-v1": "*"}
+}

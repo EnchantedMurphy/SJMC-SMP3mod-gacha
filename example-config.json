@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "sProbability": 0.02,
+  "aProbability": 0.10,
+  "pity": 80,
+  "animationTicks": 100,
+  "resultTicks": 40,
+  "pools": {},
+  "rewards": {
+    "S": [
+      {
+        "id": "mace_and_stamps",
+        "label": "重锤 ×1 + 咖啡印章 ×20",
+        "weight": 1,
+        "rewards": [
+          {"item": {"id": "minecraft:mace", "count": 1}},
+          {"command": "economy give %player% fuji:coffee_stamp 20"}
+        ]
+      }
+    ],
+    "A": [
+      {"id": "diamond", "label": "钻石", "weight": 1, "rewards": [{"item": {"id": "minecraft:diamond", "count": 1}}]},
+      {"id": "gold_ingot", "label": "金锭", "weight": 1, "rewards": [{"item": {"id": "minecraft:gold_ingot", "count": 1}}]},
+      {"id": "iron_ingot", "label": "铁锭", "weight": 1, "rewards": [{"item": {"id": "minecraft:iron_ingot", "count": 1}}]}
+    ],
+    "B": [
+      {"id": "tongbao", "label": "铁镐通宝 ×20", "weight": 1, "rewards": [{"command": "economy give %player% fuji:tongbao 20"}]}
+    ]
+  }
+}

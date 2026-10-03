@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "gacha",
+  "version": "${version}",
+  "name": "gacha",
+  "description": "Server-side gacha tickets, per-player pity, history and vanilla display animations.",
+  "environment": "server",
+  "entrypoints": {"server": ["dev.murphy.gacha.GachaMod"]},
+  "mixins": ["gacha.mixins.json"],
+  "depends": {"fabricloader": ">=0.19.5", "minecraft": "26.3", "java": ">=25", "fabric-api": "*"},
+  "suggests": {"fuji": "*"}
+}
