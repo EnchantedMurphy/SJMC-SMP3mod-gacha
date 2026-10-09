@@ -57,13 +57,16 @@ class ChatUiTest {
                 UiActions.decode(new ServerboundCustomClickActionPacket(next.id(), next.payload())));
         assertNull(second.getLast().getSiblings().get(2).getStyle().getClickEvent());
     }
-    @Test void compactHistoryUsesTierSquaresAndEndsEveryRedWithItsCycleCount() {
+    @Test void compactHistoryRunsLeftToRightAndBottomToTopWithANewRowAfterEveryRed() {
         var lines = ChatUi.history(historyData(), 1);
-        assertEquals(List.of("■ 5抽", "■■■■■ 4抽", "■■■■ 3抽", "■■"),
+        assertEquals(List.of("■■■■■ 5抽", "■■■■ 4抽", "■■■ 3抽"),
                 lines.subList(2, lines.size() - 1).stream().map(Component::getString).toList());
-        assertEquals(List.of(0xFF5555), spans(lines.get(2)).stream().map(Span::color).distinct().toList());
-        assertEquals(List.of(0x5555FF, 0x5555FF, 0xFFFF55, 0x5555FF, 0xFF5555, 0xFF5555),
+        assertEquals(List.of(0x5555FF, 0xFFFF55, 0x5555FF, 0x5555FF, 0xFF5555, 0xFF5555),
+                spans(lines.get(2)).stream().map(Span::color).toList());
+        assertEquals(List.of(0xFFFF55, 0x5555FF, 0x5555FF, 0xFF5555, 0xFF5555),
                 spans(lines.get(3)).stream().map(Span::color).toList());
+        assertEquals(List.of(0x5555FF, 0x5555FF, 0xFF5555, 0xFF5555),
+                spans(lines.get(4)).stream().map(Span::color).toList());
         var toggle = (ClickEvent.Custom) lines.getLast().getSiblings().getLast().getStyle().getClickEvent();
         assertEquals(new UiActions.Request(UiActions.Action.HISTORY_DETAILS, 1),
                 UiActions.decode(new ServerboundCustomClickActionPacket(toggle.id(), toggle.payload())));
@@ -74,10 +77,11 @@ class ChatUiTest {
         data.receipts.add(receipt); data.totalDraws = 121;
         var first = ChatUi.history(data, 1); var second = ChatUi.history(data, 2);
         assertTrue(first.getFirst().getString().contains("第 1/2 页"));
-        assertEquals(List.of(20, 2, 20, 20, 20, 18), first.subList(2, first.size() - 1).stream()
+        assertEquals(List.of(1, 20, 19, 20, 20, 20), first.subList(2, first.size() - 1).stream()
                 .map(c -> (int) c.getString().chars().filter(ch -> ch == '■').count()).toList());
-        assertEquals("■■ 80抽", first.get(3).getString());
-        assertEquals("■■ 20抽", second.get(2).getString());
+        assertEquals("■".repeat(19) + " 80抽", first.get(4).getString());
+        assertEquals("■", second.get(2).getString());
+        assertEquals("■".repeat(20) + " 20抽", second.get(3).getString());
         assertThrows(IllegalArgumentException.class, () -> ChatUi.history(data, 3));
         var toggle = (ClickEvent.Custom) second.getLast().getSiblings().getLast().getStyle().getClickEvent();
         assertEquals(11, UiActions.decode(new ServerboundCustomClickActionPacket(toggle.id(), toggle.payload())).page());

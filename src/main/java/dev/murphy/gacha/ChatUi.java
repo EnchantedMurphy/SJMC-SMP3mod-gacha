@@ -60,20 +60,25 @@ final class ChatUi {
         lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
         lines.add(Component.literal("■ B  ").withStyle(color(Tier.B)).append(Component.literal("■ A  ").withStyle(color(Tier.A)))
                 .append(Component.literal("■ S").withStyle(color(Tier.S)))
-                .append(Component.literal(" · 最新在前，每行最多20抽；红后数字为本次出红抽数。").withStyle(ChatFormatting.GRAY)));
+                .append(Component.literal(" · 时间从左到右、从下到上，每行最多20抽；红后数字为本次出红抽数。").withStyle(ChatFormatting.GRAY)));
         int offset = (page - 1) * HISTORY_PAGE_SIZE;
+        List<Component> blockLines = new ArrayList<>();
         MutableComponent line = Component.empty();
         int columns = 0;
-        for (int i = offset; i < Math.min(rows.size(), offset + (long) HISTORY_PAGE_SIZE); i++) {
-            var row = rows.get(rows.size() - 1 - i);
+        int start = (int) Math.max(0, rows.size() - offset - (long) HISTORY_PAGE_SIZE);
+        int end = rows.size() - offset;
+        // Fill each row chronologically, then put later rows above earlier rows.
+        for (int i = start; i < end; i++) {
+            var row = rows.get(i);
             line.append(Component.literal("■").withStyle(color(row.draw().tier)));
             columns++;
             if (row.draw().tier == Tier.S) line.append(Component.literal(" " + row.sinceS() + "抽").withStyle(color(Tier.S)));
             if (columns == HISTORY_ROW_SIZE || row.draw().tier == Tier.S) {
-                lines.add(line); line = Component.empty(); columns = 0;
+                blockLines.add(line); line = Component.empty(); columns = 0;
             }
         }
-        if (columns > 0) lines.add(line);
+        if (columns > 0) blockLines.add(line);
+        for (int i = blockLines.size() - 1; i >= 0; i--) lines.add(blockLines.get(i));
         if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));
         lines.add(navigation(page, pages, UiActions::history).copy().append("  ")
                 .append(button("[详细历史]", UiActions.historyDetails(offset / DETAILS_PAGE_SIZE + 1), "查看此页最新一抽起的详细记录")));
