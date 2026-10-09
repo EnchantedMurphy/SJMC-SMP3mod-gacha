@@ -12,14 +12,16 @@ import java.util.Optional;
 /** Vanilla custom clicks request read-only pages, never execute client-supplied commands. */
 public final class UiActions {
     private static final Identifier HISTORY = Identifier.fromNamespaceAndPath("gacha", "history");
+    private static final Identifier HISTORY_DETAILS = Identifier.fromNamespaceAndPath("gacha", "history_details");
     private static final Identifier HELP = Identifier.fromNamespaceAndPath("gacha", "help");
-    enum Action { HISTORY, HELP }
+    enum Action { HISTORY, HISTORY_DETAILS, HELP }
     record Request(Action action, int page) {}
     private UiActions() {}
 
     static ClickEvent.Custom history(int page) { return new ClickEvent.Custom(HISTORY, Optional.of(IntTag.valueOf(page))); }
+    static ClickEvent.Custom historyDetails(int page) { return new ClickEvent.Custom(HISTORY_DETAILS, Optional.of(IntTag.valueOf(page))); }
     static ClickEvent.Custom help(int page) { return new ClickEvent.Custom(HELP, Optional.of(IntTag.valueOf(page))); }
-    public static boolean isOurs(Identifier id) { return HISTORY.equals(id) || HELP.equals(id); }
+    public static boolean isOurs(Identifier id) { return HISTORY.equals(id) || HISTORY_DETAILS.equals(id) || HELP.equals(id); }
 
     static Request decode(ServerboundCustomClickActionPacket packet) {
         if (!isOurs(packet.id())) throw new IllegalArgumentException("未知的抽奖界面操作。");
@@ -29,6 +31,7 @@ public final class UiActions {
                 || page.longValue() < 1 || page.longValue() > Integer.MAX_VALUE
                 || HELP.equals(packet.id()) && page.longValue() > 4)
             throw new IllegalArgumentException("界面页码无效。");
-        return new Request(HELP.equals(packet.id()) ? Action.HELP : Action.HISTORY, page.intValue());
+        return new Request(HELP.equals(packet.id()) ? Action.HELP
+                : HISTORY_DETAILS.equals(packet.id()) ? Action.HISTORY_DETAILS : Action.HISTORY, page.intValue());
     }
 }

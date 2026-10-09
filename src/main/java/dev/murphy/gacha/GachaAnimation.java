@@ -33,7 +33,7 @@ final class GachaAnimation {
     final List<Display.BlockDisplay> displays = new ArrayList<>();
     private final List<FireworkRocketEntity> rockets = new ArrayList<>();
     private final double x, y, z;
-    private final String axis;
+    private final Facing facing;
     private int rocketTicks;
 
     /** Uses the vanilla entity type and packets, but cannot execute server-side flight/collision damage. */
@@ -49,13 +49,13 @@ final class GachaAnimation {
         this.x = (pool.minX + (double) pool.maxX + 1) / 2;
         this.z = (pool.minZ + (double) pool.maxZ + 1) / 2;
         this.y = pool.maxY + 2.0;
-        this.axis = pool.displayAxis;
+        this.facing = pool.facing();
         try {
             for (int i = 0; i < draws; i++) {
                 double offset = draws == 1 ? 0 : (i % 5 - 2) * 0.9;
                 double rowY = y + (draws == 10 && i < 5 ? 0.9 : 0);
                 Display.BlockDisplay display = new Display.BlockDisplay(EntityTypes.BLOCK_DISPLAY, level);
-                display.setPos(x + (axis.equals("x") ? offset : 0), rowY, z + (axis.equals("z") ? offset : 0));
+                display.setPos(x + facing.rightX * offset, rowY, z + facing.rightZ * offset);
                 display.addTag(FX_TAG);
                 ((DisplayAccess) display).gacha$transform(new Transformation(new Vector3f(-0.3f, -0.3f, -0.3f),
                         new Quaternionf(), new Vector3f(0.6f), new Quaternionf()));
@@ -88,7 +88,7 @@ final class GachaAnimation {
                 FireworkExplosion.Shape.LARGE_BALL, IntArrayList.of(color), IntArrayList.of(color), true, true))));
         for (int side : new int[]{-1, 1}) {
             FireworkRocketEntity rocket = new CosmeticFirework(level, firework.copy(),
-                    x + (axis.equals("x") ? side * 3.2 : 0), y, z + (axis.equals("z") ? side * 3.2 : 0));
+                    x + facing.rightX * side * 3.2, y, z + facing.rightZ * side * 3.2);
             rocket.addTag(FX_TAG);
             if (level.addFreshEntity(rocket)) rockets.add(rocket);
         }

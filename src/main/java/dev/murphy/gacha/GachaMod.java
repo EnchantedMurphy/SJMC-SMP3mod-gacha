@@ -106,10 +106,13 @@ public final class GachaMod implements DedicatedServerModInitializer {
             mod.lastUiClick.entrySet().removeIf(e -> tick - e.getValue() > 1200);
             var request = UiActions.decode(packet);
             var source = player.createCommandSourceStack();
-            if (request.action() == UiActions.Action.HISTORY) {
+            if (request.action() != UiActions.Action.HELP) {
                 mod.available();
                 // Always use the actual sender's UUID, never a client-selected player.
-                ChatUi.history(mod.store.load(player.getUUID()), request.page()).forEach(player::sendSystemMessage);
+                var data = mod.store.load(player.getUUID());
+                var lines = request.action() == UiActions.Action.HISTORY_DETAILS
+                        ? ChatUi.historyDetails(data, request.page()) : ChatUi.history(data, request.page());
+                lines.forEach(player::sendSystemMessage);
             } else ChatUi.help(source, request.page()).forEach(player::sendSystemMessage);
         } catch (Exception e) {
             player.sendSystemMessage(Component.literal(e.getMessage() == null ? "界面操作失败，请查看日志。" : e.getMessage()).withStyle(ChatFormatting.RED));

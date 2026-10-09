@@ -160,15 +160,21 @@ public final class GachaGameTest {
             helper.assertTrue(count(first[0], Items.DIAMOND) >= 10 && count(first[0], Items.EMERALD) >= 10, "ten item and command prizes restored");
             first[0].messages.clear();
             server.getCommands().performPrefixedCommand(first[0].createCommandSourceStack(), "gacha history");
+            helper.assertTrue(first[0].saw("第 1/1 页") && first[0].saw("■ 1抽"), "default history shows red squares and cycle counts");
+            var details = first[0].messages.getLast().getSiblings().getLast().getStyle().getClickEvent();
+            helper.assertTrue(details instanceof net.minecraft.network.chat.ClickEvent.Custom, "details toggle uses custom click");
+            click(first[0], (net.minecraft.network.chat.ClickEvent.Custom) details);
             helper.assertTrue(first[0].saw("第 1/2 页"), "history has ten rows per page");
             helper.assertTrue(first[0].messages.stream().filter(m -> m.getString().startsWith("#")).count() == 10, "first page has ten draw rows");
+        }));
+        helper.runAtTickTime(272, () -> {
             var footer = first[0].messages.getLast();
-            var next = footer.getSiblings().getLast().getStyle().getClickEvent();
+            var next = footer.getSiblings().get(2).getStyle().getClickEvent();
             helper.assertTrue(next instanceof net.minecraft.network.chat.ClickEvent.Custom, "next page uses custom click, avoiding command confirmation");
             click(first[0], (net.minecraft.network.chat.ClickEvent.Custom) next);
             helper.assertTrue(first[0].messages.stream().filter(m -> m.getString().startsWith("#")).count() == 1, "second page has the remaining draw");
             helper.assertTrue(first[0].saw("第 2/2 页") && first[0].saw("距上次S第1抽"), "real custom packet opens sender history with pity-cycle count");
-        }));
+        });
         helper.runAtTickTime(274, () -> {
             var previous = first[0].messages.getLast().getSiblings().getFirst().getStyle().getClickEvent();
             helper.assertTrue(previous instanceof net.minecraft.network.chat.ClickEvent.Custom, "previous page uses custom click");
@@ -179,6 +185,15 @@ public final class GachaGameTest {
             click(first[0], UiActions.help(2));
             helper.assertTrue(first[0].saw("该帮助页不可访问"), "forged admin help click rechecks current player permissions");
         });
+        helper.runAtTickTime(276, () -> {
+            var back = first[0].messages.getLast().getSiblings().getLast().getStyle().getClickEvent();
+            click(first[0], (net.minecraft.network.chat.ClickEvent.Custom) back);
+            helper.assertTrue(first[0].saw("第 1/1 页") && first[0].saw("■ 1抽"), "toggle returns to square history");
+        });
+        helper.runAtTickTime(280, () -> {
+            click(second, UiActions.historyDetails(1));
+            helper.assertTrue(second.saw("共 0 抽") && second.saw("尚无抽奖记录"), "details click also reads only the sender's history");
+        });
         helper.runAtTickTime(282, () -> {
             click(second, UiActions.history(1));
             helper.assertTrue(second.saw("共 0 抽") && second.saw("尚无抽奖记录"), "history click cannot read another player's history");
@@ -187,6 +202,47 @@ public final class GachaGameTest {
             helper.assertTrue(displays(helper.getLevel()).isEmpty(), "ten animation cleanup completes");
             leave(first[0]); leave(second); checked(() -> mod.saveConfig(original)); helper.succeed();
         });
+    }
+
+    @GameTest(maxTicks = 20)
+    public void fourFacingsArrangeDisplaysAndFireworks(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(new BlockPos(2, 2, 2));
+        Pool pool = new Pool(); pool.minX = pool.maxX = anchor.getX(); pool.minY = pool.maxY = anchor.getY();
+        pool.minZ = pool.maxZ = anchor.getZ();
+        // Expected world-space direction from the viewer's left to right, independent of production vectors.
+        int[][] right = {{0, -1}, {0, 1}, {1, 0}, {-1, 0}};
+        String[] facings = {"+x", "-x", "+z", "-z"};
+        for (int f = 0; f < facings.length; f++) {
+            pool.displayFacing = facings[f];
+            var animation = new GachaAnimation(helper.getLevel(), pool, 10);
+            try {
+                double centerX = anchor.getX() + 0.5, centerZ = anchor.getZ() + 0.5;
+                for (int i = 0; i < 10; i++) {
+                    var display = animation.displays.get(i); double offset = (i % 5 - 2) * 0.9;
+                    helper.assertTrue(Math.abs(display.getX() - centerX - right[f][0] * offset) < 0.001
+                            && Math.abs(display.getZ() - centerZ - right[f][1] * offset) < 0.001
+                            && Math.abs(display.getY() - anchor.getY() - 2 - (i < 5 ? 0.9 : 0)) < 0.001,
+                            "facing " + facings[f] + " keeps top-left to bottom-right order");
+                }
+                List<PlayerStore.Draw> draws = new ArrayList<>();
+                for (int i = 0; i < 10; i++) { var draw = new PlayerStore.Draw(); draw.tier = Tier.B; draws.add(draw); }
+                animation.reveal(draws);
+                int rockets = 0;
+                for (var entity : helper.getLevel().getAllEntities())
+                    if (entity instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity
+                            && entity.entityTags().contains(GachaAnimation.FX_TAG)
+                            && Math.abs(entity.getX() - centerX) < 4 && Math.abs(entity.getZ() - centerZ) < 4
+                            && Math.abs(entity.getY() - anchor.getY() - 2) < 0.001) {
+                        double dx = entity.getX() - centerX, dz = entity.getZ() - centerZ;
+                        helper.assertTrue(Math.abs(dx * right[f][0] + dz * right[f][1]) > 3.19
+                                && Math.abs(dx * right[f][1] - dz * right[f][0]) < 0.001,
+                                "fireworks stay on the display's two sides");
+                        rockets++;
+                    }
+                helper.assertTrue(rockets == 2, "two cosmetic fireworks per facing");
+            } finally { animation.clear(); }
+        }
+        helper.succeed();
     }
 
     @GameTest(maxTicks = 20)

@@ -43,17 +43,48 @@ class ChatUiTest {
         var data = historyData();
         assertEquals(List.of(1L, 2L, 3L, 1L, 2L, 3L, 4L, 1L, 2L, 3L, 4L, 5L),
                 ChatUi.historyRows(data).stream().map(ChatUi.History::sinceS).toList());
-        var first = ChatUi.history(data, 1); var second = ChatUi.history(data, 2);
+        var first = ChatUi.historyDetails(data, 1); var second = ChatUi.historyDetails(data, 2);
         assertEquals(10, first.stream().filter(c -> c.getString().startsWith("#")).count());
         assertEquals(2, second.stream().filter(c -> c.getString().startsWith("#")).count());
         assertTrue(first.get(2).getString().contains("距上次S第5抽"));
         assertTrue(second.get(2).getString().contains("距上次S第2抽"));
         assertFalse(first.stream().anyMatch(c -> c.getString().contains("S 保底")));
         assertFalse(first.stream().anyMatch(c -> c.getString().contains("十连末抽保底")));
-        assertThrows(IllegalArgumentException.class, () -> ChatUi.history(data, 3));
+        assertThrows(IllegalArgumentException.class, () -> ChatUi.historyDetails(data, 3));
         assertNull(first.getLast().getSiblings().getFirst().getStyle().getClickEvent());
-        assertInstanceOf(ClickEvent.Custom.class, first.getLast().getSiblings().getLast().getStyle().getClickEvent());
-        assertNull(second.getLast().getSiblings().getLast().getStyle().getClickEvent());
+        var next = assertInstanceOf(ClickEvent.Custom.class, first.getLast().getSiblings().get(2).getStyle().getClickEvent());
+        assertEquals(new UiActions.Request(UiActions.Action.HISTORY_DETAILS, 2),
+                UiActions.decode(new ServerboundCustomClickActionPacket(next.id(), next.payload())));
+        assertNull(second.getLast().getSiblings().get(2).getStyle().getClickEvent());
+    }
+    @Test void compactHistoryUsesTierSquaresAndEndsEveryRedWithItsCycleCount() {
+        var lines = ChatUi.history(historyData(), 1);
+        assertEquals(List.of("■ 5抽", "■■■■■ 4抽", "■■■■ 3抽", "■■"),
+                lines.subList(2, lines.size() - 1).stream().map(Component::getString).toList());
+        assertEquals(List.of(0xFF5555), spans(lines.get(2)).stream().map(Span::color).distinct().toList());
+        assertEquals(List.of(0x5555FF, 0x5555FF, 0xFFFF55, 0x5555FF, 0xFF5555, 0xFF5555),
+                spans(lines.get(3)).stream().map(Span::color).toList());
+        var toggle = (ClickEvent.Custom) lines.getLast().getSiblings().getLast().getStyle().getClickEvent();
+        assertEquals(new UiActions.Request(UiActions.Action.HISTORY_DETAILS, 1),
+                UiActions.decode(new ServerboundCustomClickActionPacket(toggle.id(), toggle.payload())));
+    }
+    @Test void compactHistoryWrapsAtTwentyPaginatesAndCountsAcrossPageBoundaries() {
+        var data = new PlayerStore.Data(); var receipt = new PlayerStore.Receipt();
+        for (int i = 1; i <= 121; i++) receipt.draws.add(draw(i, i == 20 || i == 100 ? S : B));
+        data.receipts.add(receipt); data.totalDraws = 121;
+        var first = ChatUi.history(data, 1); var second = ChatUi.history(data, 2);
+        assertTrue(first.getFirst().getString().contains("第 1/2 页"));
+        assertEquals(List.of(20, 2, 20, 20, 20, 18), first.subList(2, first.size() - 1).stream()
+                .map(c -> (int) c.getString().chars().filter(ch -> ch == '■').count()).toList());
+        assertEquals("■■ 80抽", first.get(3).getString());
+        assertEquals("■■ 20抽", second.get(2).getString());
+        assertThrows(IllegalArgumentException.class, () -> ChatUi.history(data, 3));
+        var toggle = (ClickEvent.Custom) second.getLast().getSiblings().getLast().getStyle().getClickEvent();
+        assertEquals(11, UiActions.decode(new ServerboundCustomClickActionPacket(toggle.id(), toggle.payload())).page());
+        var back = (ClickEvent.Custom) ChatUi.historyDetails(data, 11).getLast().getSiblings().getLast().getStyle().getClickEvent();
+        assertEquals(new UiActions.Request(UiActions.Action.HISTORY, 2),
+                UiActions.decode(new ServerboundCustomClickActionPacket(back.id(), back.payload())));
+        assertTrue(ChatUi.history(new PlayerStore.Data(), 1).get(2).getString().contains("尚无抽奖记录"));
     }
     private record Span(String text, int color) {}
     private static List<Span> spans(Component component) {
@@ -77,7 +108,7 @@ class ChatUiTest {
                 result.stream().filter(s -> s.text.startsWith("[")).map(Span::color).toList());
     }
     @Test void navigationSurvivesVanillaTextAndPacketCodecsWithoutRunCommand() {
-        for (var action : List.of(UiActions.history(2), UiActions.history(32768), UiActions.help(4))) {
+        for (var action : List.of(UiActions.history(2), UiActions.history(32768), UiActions.historyDetails(11), UiActions.help(4))) {
             var json = ClickEvent.CODEC.encodeStart(JsonOps.INSTANCE, action).getOrThrow();
             assertFalse(json.toString().contains("run_command"));
             var decoded = assertInstanceOf(ClickEvent.Custom.class, ClickEvent.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());

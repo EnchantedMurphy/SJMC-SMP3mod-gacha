@@ -44,7 +44,10 @@ final class GachaCommands {
                         .executes(c -> safe(c, () -> help(c.getSource(), IntegerArgumentType.getInteger(c, "page"))))));
         root.then(Commands.literal("history").executes(c -> safe(c, () -> history(c.getSource(), 1)))
                 .then(Commands.argument("page", IntegerArgumentType.integer(1))
-                        .executes(c -> safe(c, () -> history(c.getSource(), IntegerArgumentType.getInteger(c, "page"))))));
+                        .executes(c -> safe(c, () -> history(c.getSource(), IntegerArgumentType.getInteger(c, "page")))))
+                .then(Commands.literal("details").executes(c -> safe(c, () -> historyDetails(c.getSource(), 1)))
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                .executes(c -> safe(c, () -> historyDetails(c.getSource(), IntegerArgumentType.getInteger(c, "page")))))));
         root.then(Commands.literal("pity").executes(c -> safe(c, () -> {
             mod.available(); ServerPlayer player = c.getSource().getPlayerOrException();
             var data = mod.store.load(player.getUUID());
@@ -63,6 +66,12 @@ final class GachaCommands {
                             .executes(c -> safe(c, () -> give(c, draws, IntegerArgumentType.getInteger(c, "count")))))));
         }
         root.then(give);
+        var facing = Commands.literal("facing").then(facingDirections());
+        var axis = Commands.literal("axis");
+        var axisName = facingDirections();
+        for (String legacy : List.of("x", "z"))
+            axisName.then(Commands.literal(legacy).executes(c -> safe(c, () -> axis(c, legacy))));
+        axis.then(axisName);
         root.then(Commands.literal("pool").requires(GachaCommands::admin)
                 .then(Commands.literal("set").then(Commands.argument("name", StringArgumentType.word())
                         .then(Commands.argument("from", BlockPosArgument.blockPos()).then(Commands.argument("to", BlockPosArgument.blockPos())
@@ -72,14 +81,13 @@ final class GachaCommands {
                     if (config.pools.remove(text(c, "name")) == null) throw new IllegalArgumentException("抽奖池不存在。");
                     mod.saveConfig(config); tell(c.getSource(), "抽奖池已删除。"); return 1;
                 }))))
-                .then(Commands.literal("axis").then(Commands.argument("name", StringArgumentType.word())
-                        .then(Commands.literal("x").executes(c -> safe(c, () -> axis(c, "x"))))
-                        .then(Commands.literal("z").executes(c -> safe(c, () -> axis(c, "z"))))))
+                .then(axis).then(facing)
                 .then(Commands.literal("list").executes(c -> safe(c, () -> {
                     mod.available();
                     if (mod.config.pools.isEmpty()) tell(c.getSource(), "尚未设置抽奖池。用 /gacha pool set main <坐标1> <坐标2> 设置。");
                     mod.config.pools.forEach((name, p) -> tell(c.getSource(), name + " · " + p.dimension + " · "
-                            + p.minX + " " + p.minY + " " + p.minZ + " → " + p.maxX + " " + p.maxY + " " + p.maxZ));
+                            + p.minX + " " + p.minY + " " + p.minZ + " → " + p.maxX + " " + p.maxY + " " + p.maxZ
+                            + " · 面朝 " + p.facing().id));
                     return 1;
                 }))));
         var reward = Commands.literal("reward").requires(GachaCommands::admin);
@@ -146,7 +154,20 @@ final class GachaCommands {
     private int axis(CommandContext<CommandSourceStack> c, String axis) throws Exception {
         mod.requireIdlePool(text(c, "name")); var config = mod.editable(); Pool p = config.pools.get(text(c, "name"));
         if (p == null) throw new IllegalArgumentException("抽奖池不存在。");
-        p.displayAxis = axis; mod.saveConfig(config); tell(c.getSource(), "展示横排方向已改为 " + axis.toUpperCase() + " 轴。"); return 1;
+        p.displayAxis = axis; p.displayFacing = null;
+        mod.saveConfig(config); tell(c.getSource(), "展示横排方向已改为 " + axis.toUpperCase() + " 轴，面朝 " + p.facing().id + "。"); return 1;
+    }
+    private com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> facingDirections() {
+        var name = Commands.argument("name", StringArgumentType.word());
+        for (Facing facing : Facing.values())
+            name.then(Commands.literal(facing.id).executes(c -> safe(c, () -> facing(c, facing))));
+        return name;
+    }
+    private int facing(CommandContext<CommandSourceStack> c, Facing facing) throws Exception {
+        mod.requireIdlePool(text(c, "name")); var config = mod.editable(); Pool p = config.pools.get(text(c, "name"));
+        if (p == null) throw new IllegalArgumentException("抽奖池不存在。");
+        p.displayFacing = facing.id; p.displayAxis = facing.rightX == 0 ? "z" : "x";
+        mod.saveConfig(config); tell(c.getSource(), "展示面朝方向已改为 " + facing.id + "，正面看按上排左至右、下排左至右揭晓。"); return 1;
     }
     private int setHand(CommandContext<CommandSourceStack> c, Tier tier, int weight) throws Exception {
         var player = c.getSource().getPlayerOrException();
@@ -192,6 +213,12 @@ final class GachaCommands {
         mod.available();
         var data = mod.store.load(source.getPlayerOrException().getUUID());
         ChatUi.history(data, page).forEach(line -> source.sendSuccess(() -> line, false));
+        return 1;
+    }
+    private int historyDetails(CommandSourceStack source, int page) throws Exception {
+        mod.available();
+        var data = mod.store.load(source.getPlayerOrException().getUUID());
+        ChatUi.historyDetails(data, page).forEach(line -> source.sendSuccess(() -> line, false));
         return 1;
     }
     private static int help(CommandSourceStack source, int page) {

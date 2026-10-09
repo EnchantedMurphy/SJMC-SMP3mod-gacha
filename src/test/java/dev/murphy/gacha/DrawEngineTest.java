@@ -100,4 +100,16 @@ class DrawEngineTest {
         assertTrue(p.contains(1, 3, 5)); assertTrue(p.contains(2.999, 4.999, 6.999));
         assertFalse(p.contains(3, 4, 6)); assertFalse(p.contains(2, 5, 6)); assertFalse(p.contains(2, 4, 7));
     }
+    @Test void fourFacingsRoundTripAndLegacyAxesKeepTheirOriginalOrder() {
+        var config = GachaConfig.defaults(); var pool = new Pool(); pool.dimension = "minecraft:overworld";
+        config.pools.put("main", pool);
+        assertEquals(Facing.POS_Z, pool.facing());
+        pool.displayAxis = "z"; assertEquals(Facing.NEG_X, pool.facing());
+        for (String id : List.of("+x", "-x", "+z", "-z")) {
+            pool.displayFacing = id; config.validate();
+            var restored = JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(config), GachaConfig.class);
+            restored.validate(); assertEquals(id, restored.pools.get("main").facing().id);
+        }
+        pool.displayFacing = "north"; assertThrows(IllegalArgumentException.class, config::validate);
+    }
 }

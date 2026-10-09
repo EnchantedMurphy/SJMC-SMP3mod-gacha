@@ -17,6 +17,9 @@ import static dev.murphy.gacha.GachaConfig.*;
 
 final class ChatUi {
     static final int ORANGE = 0xFFA500;
+    static final int HISTORY_PAGE_SIZE = 100;
+    static final int DETAILS_PAGE_SIZE = 10;
+    static final int HISTORY_ROW_SIZE = 20;
     record History(PlayerStore.Draw draw, PlayerStore.Receipt receipt, long sinceS) {}
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss").withZone(ZoneId.of("Asia/Shanghai"));
     private ChatUi() {}
@@ -51,13 +54,40 @@ final class ChatUi {
     }
     static List<Component> history(PlayerStore.Data data, int page) {
         var rows = historyRows(data);
-        int pages = (int) Math.max(1, (rows.size() + 9L) / 10);
+        int pages = (int) Math.max(1, (rows.size() + (long) HISTORY_PAGE_SIZE - 1) / HISTORY_PAGE_SIZE);
+        if (page < 1 || page > pages) throw new IllegalArgumentException("页码超出范围，共 " + pages + " 页。");
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
+        lines.add(Component.literal("■ B  ").withStyle(color(Tier.B)).append(Component.literal("■ A  ").withStyle(color(Tier.A)))
+                .append(Component.literal("■ S").withStyle(color(Tier.S)))
+                .append(Component.literal(" · 最新在前，每行最多20抽；红后数字为本次出红抽数。").withStyle(ChatFormatting.GRAY)));
+        int offset = (page - 1) * HISTORY_PAGE_SIZE;
+        MutableComponent line = Component.empty();
+        int columns = 0;
+        for (int i = offset; i < Math.min(rows.size(), offset + (long) HISTORY_PAGE_SIZE); i++) {
+            var row = rows.get(rows.size() - 1 - i);
+            line.append(Component.literal("■").withStyle(color(row.draw().tier)));
+            columns++;
+            if (row.draw().tier == Tier.S) line.append(Component.literal(" " + row.sinceS() + "抽").withStyle(color(Tier.S)));
+            if (columns == HISTORY_ROW_SIZE || row.draw().tier == Tier.S) {
+                lines.add(line); line = Component.empty(); columns = 0;
+            }
+        }
+        if (columns > 0) lines.add(line);
+        if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));
+        lines.add(navigation(page, pages, UiActions::history).copy().append("  ")
+                .append(button("[详细历史]", UiActions.historyDetails(offset / DETAILS_PAGE_SIZE + 1), "查看此页最新一抽起的详细记录")));
+        return lines;
+    }
+    static List<Component> historyDetails(PlayerStore.Data data, int page) {
+        var rows = historyRows(data);
+        int pages = (int) Math.max(1, (rows.size() + (long) DETAILS_PAGE_SIZE - 1) / DETAILS_PAGE_SIZE);
         if (page < 1 || page > pages) throw new IllegalArgumentException("页码超出范围，共 " + pages + " 页。");
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽（时间：北京时间）").withStyle(ChatFormatting.GOLD));
         lines.add(Component.literal("“距上次S”从上次获得S后计数，获S当抽显示本轮抽数。").withStyle(ChatFormatting.GRAY));
-        int offset = (page - 1) * 10;
-        for (int i = offset; i < Math.min(rows.size(), offset + 10L); i++) {
+        int offset = (page - 1) * DETAILS_PAGE_SIZE;
+        for (int i = offset; i < Math.min(rows.size(), offset + (long) DETAILS_PAGE_SIZE); i++) {
             var row = rows.get(rows.size() - 1 - i); var draw = row.draw();
             String flags = "";
             if (row.receipt().actions.stream().anyMatch(a -> a.status == PlayerStore.Status.FAILED || a.status == PlayerStore.Status.SENDING)) flags += " · 发奖需核查";
@@ -67,7 +97,8 @@ final class ChatUi {
                             + TIME.format(Instant.parse(row.receipt().timestamp)) + " · " + row.receipt().pool).withStyle(ChatFormatting.GRAY)));
         }
         if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));
-        lines.add(navigation(page, pages, UiActions::history));
+        lines.add(navigation(page, pages, UiActions::historyDetails).copy().append("  ")
+                .append(button("[方块历史]", UiActions.history(offset / HISTORY_PAGE_SIZE + 1), "返回包含当前记录的方块历史")));
         return lines;
     }
     private static Component button(String label, ClickEvent action, String hover) {
@@ -97,7 +128,8 @@ final class ChatUi {
             case 1 -> {
                 lines.add(Component.literal("将券投掷到抽奖池，等待约 5 秒即可领取奖品。").withStyle(ChatFormatting.YELLOW));
                 lines.add(Component.literal("整叠仅用 1 张，余券退回；抽奖期间投入的券也会退回。").withStyle(ChatFormatting.GRAY));
-                command(lines, "history [页码]", "个人历史，每页 10 抽，点击按钮翻页");
+                command(lines, "history [页码]", "三色方块历史，每页100抽，可翻页或切换详细历史");
+                command(lines, "history details [页码]", "详细历史，每页10抽");
                 command(lines, "pity", "查看距离必得 S 的抽数");
                 command(lines, "pending", "查看待领取或异常奖励");
             }
@@ -108,7 +140,7 @@ final class ChatUi {
                 lines.add(Component.literal("设置抽奖池（在目标维度执行）").withStyle(ChatFormatting.YELLOW));
                 command(lines, "pool set <池名> <坐标1> <坐标2>", "两个角确定长方体区域");
                 command(lines, "pool list", "查看所有抽奖池");
-                command(lines, "pool axis <池名> x|z", "调整展示横排方向");
+                command(lines, "pool facing <池名> +x|-x|+z|-z", "设置展示面朝方向，正面看从左到右");
                 command(lines, "pool remove <池名>", "删除抽奖池");
             }
             case 3 -> {

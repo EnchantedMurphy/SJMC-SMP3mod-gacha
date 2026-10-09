@@ -11,6 +11,16 @@ import java.util.Map;
 
 public final class GachaConfig {
     public enum Tier { S, A, B }
+    public enum Facing {
+        POS_X("+x", 0, -1), NEG_X("-x", 0, 1), POS_Z("+z", 1, 0), NEG_Z("-z", -1, 0);
+        final String id;
+        final int rightX, rightZ;
+        Facing(String id, int rightX, int rightZ) { this.id = id; this.rightX = rightX; this.rightZ = rightZ; }
+        static Facing parse(String id) {
+            for (Facing facing : values()) if (facing.id.equals(id)) return facing;
+            throw new IllegalArgumentException("面朝方向应为 +x、-x、+z 或 -z。");
+        }
+    }
     public int schemaVersion = 1;
     public double sProbability = 0.02;
     public double aProbability = 0.10;
@@ -24,6 +34,16 @@ public final class GachaConfig {
         public String dimension;
         public int minX, minY, minZ, maxX, maxY, maxZ;
         public String displayAxis = "x";
+        public String displayFacing;
+        Facing facing() {
+            if (displayFacing != null) return Facing.parse(displayFacing);
+            // Preserve the original horizontal order of legacy x/z pools.
+            return switch (displayAxis) {
+                case "x" -> Facing.POS_Z;
+                case "z" -> Facing.NEG_X;
+                default -> throw new IllegalArgumentException("旧版 displayAxis 应为 x 或 z。");
+            };
+        }
         public boolean contains(double x, double y, double z) {
             return x >= minX && x < (double) maxX + 1 && y >= minY && y < (double) maxY + 1
                     && z >= minZ && z < (double) maxZ + 1;
@@ -109,6 +129,7 @@ public final class GachaConfig {
                     || (long) p.maxX - p.minX > 64 || (long) p.maxY - p.minY > 64 || (long) p.maxZ - p.minZ > 64
                     || !("x".equals(p.displayAxis) || "z".equals(p.displayAxis)))
                 throw new IllegalArgumentException("抽奖池区域/维度无效，每边最多 65 格：" + entry.getKey());
+            p.facing();
         }
         var values = new ArrayList<>(pools.values());
         for (int i = 0; i < values.size(); i++) for (int j = i + 1; j < values.size(); j++)
