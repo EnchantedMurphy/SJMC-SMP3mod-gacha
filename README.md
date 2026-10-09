@@ -232,3 +232,7 @@ gradlew.bat build
 测试服只监听本机的临时端口，数据全部在 `build/run/fujiIntegration/`。它启用隔离的两个测试货币，实际投券验证重锤、咖啡印章 +20 和铁镐通宝 +20；结果保存到 `fuji-test-result.json`。普通构建不需要下载或加载 Fuji。
 
 Minecraft 的 GameTest 模拟用户名服务与 Fuji 的经济指令不兼容，所以真实货币验证采用普通 Dedicated Server。服务端测试验证展示实体与原版网络效果的创建、颜色及清理；音乐听感和客户端实际画面仍需进服人工验收。
+
+## 许可证
+
+本项目采用 GNU General Public License v3.0（仅此版本，`GPL-3.0-only`），完整条款见 [LICENSE](LICENSE)。发布 JAR 和源码 JAR 均附带该许可证。

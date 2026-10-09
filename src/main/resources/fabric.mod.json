@@ -4,6 +4,7 @@
   "version": "${version}",
   "name": "gacha",
   "description": "Server-side gacha tickets, per-player pity, history and vanilla display animations.",
+  "license": "GPL-3.0-only",
   "environment": "server",
   "entrypoints": {"server": ["dev.murphy.gacha.GachaMod"]},
   "mixins": ["gacha.mixins.json"],

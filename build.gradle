@@ -38,6 +38,12 @@ java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
 }
+tasks.named('jar', Jar) {
+    from('LICENSE')
+}
+tasks.named('sourcesJar', Jar) {
+    from('LICENSE')
+}
 test { useJUnitPlatform() }
 loom {
     runs {
