@@ -46,8 +46,8 @@ class ChatUiTest {
         var first = ChatUi.historyDetails(data, 1); var second = ChatUi.historyDetails(data, 2);
         assertEquals(10, first.stream().filter(c -> c.getString().startsWith("#")).count());
         assertEquals(2, second.stream().filter(c -> c.getString().startsWith("#")).count());
-        assertTrue(first.get(2).getString().contains("距上次S第5抽"));
-        assertTrue(second.get(2).getString().contains("距上次S第2抽"));
+        assertTrue(first.get(1).getString().contains("距上次S第5抽"));
+        assertTrue(second.get(1).getString().contains("距上次S第2抽"));
         assertFalse(first.stream().anyMatch(c -> c.getString().contains("S 保底")));
         assertFalse(first.stream().anyMatch(c -> c.getString().contains("十连末抽保底")));
         assertThrows(IllegalArgumentException.class, () -> ChatUi.historyDetails(data, 3));

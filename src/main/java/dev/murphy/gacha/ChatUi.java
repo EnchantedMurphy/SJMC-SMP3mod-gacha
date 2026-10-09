@@ -116,8 +116,7 @@ final class ChatUi {
         int pages = (int) Math.max(1, (rows.size() + (long) DETAILS_PAGE_SIZE - 1) / DETAILS_PAGE_SIZE);
         if (page < 1 || page > pages) throw new IllegalArgumentException("页码超出范围，共 " + pages + " 页。");
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽（时间：北京时间）").withStyle(ChatFormatting.GOLD));
-        lines.add(Component.literal("“距上次S”从上次获得S后计数，获S当抽显示本轮抽数。").withStyle(ChatFormatting.GRAY));
+        lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
         int offset = (page - 1) * DETAILS_PAGE_SIZE;
         for (int i = offset; i < Math.min(rows.size(), offset + (long) DETAILS_PAGE_SIZE); i++) {
             var row = rows.get(rows.size() - 1 - i); var draw = row.draw();
@@ -126,7 +125,7 @@ final class ChatUi {
             else if (row.receipt().actions.stream().anyMatch(a -> a.status == PlayerStore.Status.READY)) flags += " · 待发放";
             lines.add(Component.literal("#" + draw.number + " [" + draw.tier + "] " + draw.label).withStyle(color(draw.tier))
                     .append(Component.literal(flags + " · 距上次S第" + row.sinceS() + "抽 · "
-                            + TIME.format(Instant.parse(row.receipt().timestamp)) + " · " + row.receipt().pool).withStyle(ChatFormatting.GRAY)));
+                            + TIME.format(Instant.parse(row.receipt().timestamp))).withStyle(ChatFormatting.GRAY)));
         }
         if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));
         lines.add(navigation(page, pages, UiActions::historyDetails).copy().append("  ")

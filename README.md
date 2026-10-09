@@ -59,7 +59,7 @@
 
 需要 Minecraft Java **26.3**、**Java 25**、Fabric Loader **0.19.5 或更新**，以及匹配 26.3 的 Fabric API。构建验证使用 Fabric API `0.161.0+26.3`。
 
-1. 把 `build/libs/gacha-26.3-fabric-1.1.3.jar` 放入服务器 `mods` 文件夹。不要安装 `-sources.jar`。
+1. 把 `build/libs/gacha-26.3-fabric-1.1.4.jar` 放入服务器 `mods` 文件夹。不要安装 `-sources.jar`。
 2. 使用默认货币奖品时，安装匹配 26.3 的 Fuji，启用其 `economy` 模块，并保留您已配置的 `fuji:coffee_stamp` 和 `fuji:tongbao` 货币。
 3. 启动服务器，自动生成 `config/gacha/config.json`。本版使用全新的 gacha 券与数据，不识别旧版 lottery 券，也不读取或迁移 `config/lottery/`。
 4. 在抽奖池所在维度执行以下指令，把示例坐标替换为实际区域：
@@ -112,7 +112,7 @@ execute in minecraft:overworld run gacha pool set main 100 64 100 103 66 103
 | --- | --- |
 | `/gacha` 或 `/gacha help [页码]` | 按个人、券与池、奖品、高级管理分类查看帮助；管理页只向有权限的人开放 |
 | `/gacha history [页码]` | 三色方块历史，从左到右、从下到上按时间由早到晚排列，每页约 100 抽，按完整行分页、每行最多 20 抽；出红后标注抽数，后续抽奖从上面一行最左边继续 |
-| `/gacha history details [页码]` | 原版详细历史，每页 10 抽，显示奖品、逐抽计数、北京时间和奖池；可翻页或返回方块历史 |
+| `/gacha history details [页码]` | 详细历史，每页 10 抽，显示奖品、逐抽计数和记录时间；可翻页或返回方块历史 |
 | `/gacha pity` | 连续未获 S 的次数、距离必得 S 的最大抽数、累计抽数；文字黄色、数字橙色 |
 | `/gacha pending` | 查看待领取或异常奖励；正常待领动作会在下一秒继续处理 |
 
