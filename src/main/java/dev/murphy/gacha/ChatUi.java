@@ -17,10 +17,11 @@ import static dev.murphy.gacha.GachaConfig.*;
 
 final class ChatUi {
     static final int ORANGE = 0xFFA500;
-    static final int HISTORY_PAGE_SIZE = 100;
+    static final int HISTORY_PAGE_TARGET = 100;
     static final int DETAILS_PAGE_SIZE = 10;
     static final int HISTORY_ROW_SIZE = 20;
     record History(PlayerStore.Draw draw, PlayerStore.Receipt receipt, long sinceS) {}
+    private record HistoryPage(int start, int end) {}
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss").withZone(ZoneId.of("Asia/Shanghai"));
     private ChatUi() {}
 
@@ -52,23 +53,50 @@ final class ChatUi {
         }
         return rows;
     }
+    private static List<HistoryPage> historyPages(List<History> rows) {
+        List<Integer> lineEnds = new ArrayList<>();
+        int columns = 0;
+        for (int i = 0; i < rows.size(); i++) {
+            if (++columns == HISTORY_ROW_SIZE || rows.get(i).draw().tier == Tier.S) {
+                lineEnds.add(i + 1); columns = 0;
+            }
+        }
+        if (columns > 0) lineEnds.add(rows.size());
+        List<HistoryPage> pages = new ArrayList<>();
+        int end = rows.size();
+        // The draw limit is a target: finish the entire row before starting an older page.
+        for (int i = lineEnds.size() - 1; i >= 0; i--) {
+            int start = i == 0 ? 0 : lineEnds.get(i - 1);
+            if (end - start >= HISTORY_PAGE_TARGET || i == 0) {
+                pages.add(new HistoryPage(start, end)); end = start;
+            }
+        }
+        if (pages.isEmpty()) pages.add(new HistoryPage(0, 0));
+        return pages;
+    }
+    private static int historyPageForDraw(List<History> rows, int index) {
+        var pages = historyPages(rows);
+        for (int i = 0; i < pages.size(); i++)
+            if (index >= pages.get(i).start() && index < pages.get(i).end()) return i + 1;
+        return 1;
+    }
     static List<Component> history(PlayerStore.Data data, int page) {
         var rows = historyRows(data);
-        int pages = (int) Math.max(1, (rows.size() + (long) HISTORY_PAGE_SIZE - 1) / HISTORY_PAGE_SIZE);
+        var pageRanges = historyPages(rows);
+        int pages = pageRanges.size();
         if (page < 1 || page > pages) throw new IllegalArgumentException("页码超出范围，共 " + pages + " 页。");
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
         lines.add(Component.literal("■ B  ").withStyle(color(Tier.B)).append(Component.literal("■ A  ").withStyle(color(Tier.A)))
                 .append(Component.literal("■ S").withStyle(color(Tier.S)))
                 .append(Component.literal(" · 时间从左到右、从下到上，每行最多20抽；红后数字为本次出红抽数。").withStyle(ChatFormatting.GRAY)));
-        int offset = (page - 1) * HISTORY_PAGE_SIZE;
+        var range = pageRanges.get(page - 1);
+        int offset = rows.size() - range.end();
         List<Component> blockLines = new ArrayList<>();
         MutableComponent line = Component.empty();
         int columns = 0;
-        int start = (int) Math.max(0, rows.size() - offset - (long) HISTORY_PAGE_SIZE);
-        int end = rows.size() - offset;
         // Fill each row chronologically, then put later rows above earlier rows.
-        for (int i = start; i < end; i++) {
+        for (int i = range.start(); i < range.end(); i++) {
             var row = rows.get(i);
             line.append(Component.literal("■").withStyle(color(row.draw().tier)));
             columns++;
@@ -103,7 +131,7 @@ final class ChatUi {
         }
         if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));
         lines.add(navigation(page, pages, UiActions::historyDetails).copy().append("  ")
-                .append(button("[方块历史]", UiActions.history(offset / HISTORY_PAGE_SIZE + 1), "返回包含当前记录的方块历史")));
+                .append(button("[方块历史]", UiActions.history(historyPageForDraw(rows, rows.size() - 1 - offset)), "返回包含当前记录的方块历史")));
         return lines;
     }
     private static Component button(String label, ClickEvent action, String hover) {
@@ -133,7 +161,7 @@ final class ChatUi {
             case 1 -> {
                 lines.add(Component.literal("将券投掷到抽奖池，等待约 5 秒即可领取奖品。").withStyle(ChatFormatting.YELLOW));
                 lines.add(Component.literal("整叠仅用 1 张，余券退回；抽奖期间投入的券也会退回。").withStyle(ChatFormatting.GRAY));
-                command(lines, "history [页码]", "三色方块历史，每页100抽，可翻页或切换详细历史");
+                command(lines, "history [页码]", "三色方块历史，每页约100抽，保留完整行，可翻页或切换详细历史");
                 command(lines, "history details [页码]", "详细历史，每页10抽");
                 command(lines, "pity", "查看距离必得 S 的抽数");
                 command(lines, "pending", "查看待领取或异常奖励");

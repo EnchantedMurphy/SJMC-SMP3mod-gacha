@@ -77,18 +77,48 @@ class ChatUiTest {
         data.receipts.add(receipt); data.totalDraws = 121;
         var first = ChatUi.history(data, 1); var second = ChatUi.history(data, 2);
         assertTrue(first.getFirst().getString().contains("第 1/2 页"));
-        assertEquals(List.of(1, 20, 19, 20, 20, 20), first.subList(2, first.size() - 1).stream()
+        assertEquals(List.of(1, 20, 20, 20, 20, 20), first.subList(2, first.size() - 1).stream()
                 .map(c -> (int) c.getString().chars().filter(ch -> ch == '■').count()).toList());
-        assertEquals("■".repeat(19) + " 80抽", first.get(4).getString());
-        assertEquals("■", second.get(2).getString());
-        assertEquals("■".repeat(20) + " 20抽", second.get(3).getString());
+        assertEquals("■".repeat(20) + " 80抽", first.get(4).getString());
+        assertEquals("■".repeat(20) + " 20抽", second.get(2).getString());
         assertThrows(IllegalArgumentException.class, () -> ChatUi.history(data, 3));
         var toggle = (ClickEvent.Custom) second.getLast().getSiblings().getLast().getStyle().getClickEvent();
         assertEquals(11, UiActions.decode(new ServerboundCustomClickActionPacket(toggle.id(), toggle.payload())).page());
-        var back = (ClickEvent.Custom) ChatUi.historyDetails(data, 11).getLast().getSiblings().getLast().getStyle().getClickEvent();
+        var back = (ClickEvent.Custom) ChatUi.historyDetails(data, 12).getLast().getSiblings().getLast().getStyle().getClickEvent();
         assertEquals(new UiActions.Request(UiActions.Action.HISTORY, 2),
                 UiActions.decode(new ServerboundCustomClickActionPacket(back.id(), back.payload())));
+        var boundary = (ClickEvent.Custom) ChatUi.historyDetails(data, 11).getLast().getSiblings().getLast().getStyle().getClickEvent();
+        assertEquals(new UiActions.Request(UiActions.Action.HISTORY, 1),
+                UiActions.decode(new ServerboundCustomClickActionPacket(boundary.id(), boundary.payload())));
         assertTrue(ChatUi.history(new PlayerStore.Data(), 1).get(2).getString().contains("尚无抽奖记录"));
+    }
+    @Test void paginationNeverSplitsAnUnfinishedRowOrLosesOrRepeatsDraws() {
+        var data = new PlayerStore.Data(); var receipt = new PlayerStore.Receipt();
+        for (int i = 1; i <= 521; i++) receipt.draws.add(draw(i, i % 73 == 10 ? S : i % 7 == 0 ? A : B));
+        data.receipts.add(receipt); data.totalDraws = 521;
+        List<List<Component>> pages = new ArrayList<>();
+        for (int p = 1; ; p++) {
+            var page = ChatUi.history(data, p); pages.add(page);
+            var next = page.getLast().getSiblings().get(2).getStyle().getClickEvent();
+            if (next == null) break;
+            assertEquals(new UiActions.Request(UiActions.Action.HISTORY, p + 1),
+                    UiActions.decode(new ServerboundCustomClickActionPacket(((ClickEvent.Custom) next).id(), ((ClickEvent.Custom) next).payload())));
+        }
+        List<Integer> colors = new ArrayList<>();
+        for (int p = pages.size() - 1; p >= 0; p--) {
+            var page = pages.get(p);
+            for (int i = page.size() - 2; i >= 2; i--) {
+                var line = page.get(i); long squares = line.getString().chars().filter(ch -> ch == '■').count();
+                // Only the newest row in the entire history is allowed to be unfinished.
+                if (!(p == 0 && i == 2)) assertTrue(squares == 20 || line.getString().endsWith("抽"), line.getString());
+                for (var span : spans(line)) for (int j = 0; j < span.text().length(); j++)
+                    if (span.text().charAt(j) == '■') colors.add(span.color());
+            }
+        }
+        assertEquals(receipt.draws.stream().map(d -> switch (d.tier) {
+            case S -> 0xFF5555; case A -> 0xFFFF55; case B -> 0x5555FF;
+        }).toList(), colors, "all pages retain the original chronological sequence exactly once");
+        assertThrows(IllegalArgumentException.class, () -> ChatUi.history(data, pages.size() + 1));
     }
     private record Span(String text, int color) {}
     private static List<Span> spans(Component component) {
