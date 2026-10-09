@@ -88,8 +88,7 @@ final class ChatUi {
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
         lines.add(Component.literal("■ B  ").withStyle(color(Tier.B)).append(Component.literal("■ A  ").withStyle(color(Tier.A)))
-                .append(Component.literal("■ S").withStyle(color(Tier.S)))
-                .append(Component.literal(" · 时间从左到右、从下到上，每行最多20抽；红后数字为本次出红抽数。").withStyle(ChatFormatting.GRAY)));
+                .append(Component.literal("■ S").withStyle(color(Tier.S))));
         var range = pageRanges.get(page - 1);
         int offset = rows.size() - range.end();
         List<Component> blockLines = new ArrayList<>();

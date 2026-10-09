@@ -59,7 +59,7 @@
 
 需要 Minecraft Java **26.3**、**Java 25**、Fabric Loader **0.19.5 或更新**，以及匹配 26.3 的 Fabric API。构建验证使用 Fabric API `0.161.0+26.3`。
 
-1. 把 `build/libs/gacha-26.3-fabric-1.1.2.jar` 放入服务器 `mods` 文件夹。不要安装 `-sources.jar`。
+1. 把 `build/libs/gacha-26.3-fabric-1.1.3.jar` 放入服务器 `mods` 文件夹。不要安装 `-sources.jar`。
 2. 使用默认货币奖品时，安装匹配 26.3 的 Fuji，启用其 `economy` 模块，并保留您已配置的 `fuji:coffee_stamp` 和 `fuji:tongbao` 货币。
 3. 启动服务器，自动生成 `config/gacha/config.json`。本版使用全新的 gacha 券与数据，不识别旧版 lottery 券，也不读取或迁移 `config/lottery/`。
 4. 在抽奖池所在维度执行以下指令，把示例坐标替换为实际区域：
