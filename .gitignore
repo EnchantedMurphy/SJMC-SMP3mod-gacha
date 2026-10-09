@@ -6,3 +6,4 @@ logs/
 *.iml
 integration/*.jar
 mods/
+bin/
