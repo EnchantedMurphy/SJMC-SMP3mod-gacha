@@ -335,8 +335,8 @@ public final class GachaGameTest {
         // Expected world-space direction from the viewer's left to right, independent of production vectors.
         int[][] right = {{0, -1}, {0, 1}, {1, 0}, {-1, 0}};
         String[] facings = {"+x", "-x", "+z", "-z"};
-        for (int f = 0; f < facings.length; f++) {
-            pool.displayFacing = facings[f];
+        for (int f = 0; f < facings.length; f++) for (double distance : new double[]{3.2, 6.5}) {
+            pool.displayFacing = facings[f]; pool.fireworkDistance = distance;
             var animation = new GachaAnimation(helper.getLevel(), pool, 10);
             try {
                 double centerX = anchor.getX() + 0.5, centerZ = anchor.getZ() + 0.5;
@@ -354,12 +354,12 @@ public final class GachaGameTest {
                 for (var entity : helper.getLevel().getAllEntities())
                     if (entity instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity
                             && entity.entityTags().contains(GachaAnimation.FX_TAG)
-                            && Math.abs(entity.getX() - centerX) < 4 && Math.abs(entity.getZ() - centerZ) < 4
+                            && Math.abs(entity.getX() - centerX) < distance + .1 && Math.abs(entity.getZ() - centerZ) < distance + .1
                             && Math.abs(entity.getY() - anchor.getY() - 2) < 0.001) {
                         double dx = entity.getX() - centerX, dz = entity.getZ() - centerZ;
-                        helper.assertTrue(Math.abs(dx * right[f][0] + dz * right[f][1]) > 3.19
+                        helper.assertTrue(Math.abs(Math.abs(dx * right[f][0] + dz * right[f][1]) - distance) < .001
                                 && Math.abs(dx * right[f][1] - dz * right[f][0]) < 0.001,
-                                "fireworks stay on the display's two sides");
+                                "fireworks respect configured distance on both sides for each facing");
                         rockets++;
                     }
                 helper.assertTrue(rockets == 2, "two cosmetic fireworks per facing");

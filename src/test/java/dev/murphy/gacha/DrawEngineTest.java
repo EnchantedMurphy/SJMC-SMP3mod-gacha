@@ -161,4 +161,20 @@ class DrawEngineTest {
         config.poolDefaults.displayOffsetY = 65;
         assertThrows(IllegalArgumentException.class, config::validate);
     }
+    @Test void fireworkDistancesCopyPerPoolAndRejectInvalidValues() {
+        var config = GachaConfig.defaults(); assertEquals(3.2, config.poolDefaults.fireworkDistance);
+        config.poolDefaults.fireworkDistance = 5.5;
+        var first = config.newPool(); var second = config.newPool();
+        assertEquals(5.5, first.fireworkDistance); assertEquals(5.5, second.fireworkDistance);
+        first.fireworkDistance = 2.25; assertEquals(5.5, second.fireworkDistance);
+        var restored = JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(first), Pool.class);
+        assertEquals(2.25, restored.fireworkDistance);
+        for (double value : new double[]{-1, 65, Double.NaN, Double.POSITIVE_INFINITY}) {
+            config.poolDefaults.fireworkDistance = value;
+            assertThrows(IllegalArgumentException.class, config::validate);
+        }
+        for (double value : new double[]{0, 3.2, 64}) {
+            config.poolDefaults.fireworkDistance = value; config.validate();
+        }
+    }
 }

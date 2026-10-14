@@ -32,6 +32,7 @@ public final class GachaConfig {
         public double aProbability = 0.10;
         public int pity = 80;
         public double displayOffsetX, displayOffsetY, displayOffsetZ;
+        public double fireworkDistance = 3.2;
         public Map<Tier, List<Prize>> rewards = new EnumMap<>(Tier.class);
         public Map<Tier, List<Prize>> fixedRewards = new EnumMap<>(Tier.class);
     }
@@ -135,6 +136,8 @@ public final class GachaConfig {
     }
 
     static void validateRules(PoolRules rules) {
+        if (!Double.isFinite(rules.fireworkDistance) || rules.fireworkDistance < 0 || rules.fireworkDistance > 64)
+            throw new IllegalArgumentException("烟花左右距离必须为 0 至 64 格内的有限数值。");
         for (double offset : new double[]{rules.displayOffsetX, rules.displayOffsetY, rules.displayOffsetZ})
             if (!Double.isFinite(offset) || Math.abs(offset) > 64)
                 throw new IllegalArgumentException("展示偏移量必须为 -64 至 64 格内的有限数值。");

@@ -6,6 +6,7 @@
     "sProbability": 0.02,
     "aProbability": 0.1,
     "pity": 80,
+    "fireworkDistance": 3.2,
     "rewards": {
       "S": [
         {

@@ -34,6 +34,7 @@ final class GachaAnimation {
     private final List<FireworkRocketEntity> rockets = new ArrayList<>();
     private final double x, y, z;
     private final Facing facing;
+    private final double fireworkDistance;
     private int rocketTicks;
 
     /** Uses the vanilla entity type and packets, but cannot execute server-side flight/collision damage. */
@@ -50,6 +51,7 @@ final class GachaAnimation {
         this.z = pool.displayZ();
         this.y = pool.displayY(draws);
         this.facing = pool.facing();
+        this.fireworkDistance = pool.fireworkDistance;
         try {
             for (int i = 0; i < draws; i++) {
                 double offset = draws == 1 ? 0 : (i % 5 - 2) * 0.9;
@@ -92,7 +94,7 @@ final class GachaAnimation {
                 FireworkExplosion.Shape.LARGE_BALL, IntArrayList.of(color), IntArrayList.of(color), true, true))));
         for (int side : new int[]{-1, 1}) {
             FireworkRocketEntity rocket = new CosmeticFirework(level, firework.copy(),
-                    x + facing.rightX * side * 3.2, y, z + facing.rightZ * side * 3.2);
+                    x + facing.rightX * side * fireworkDistance, y, z + facing.rightZ * side * fireworkDistance);
             rocket.addTag(FX_TAG);
             if (level.addFreshEntity(rocket)) rockets.add(rocket);
         }

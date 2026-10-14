@@ -6,7 +6,7 @@
 
 需要 Minecraft Java **26.3**、**Java 25**、Fabric Loader **0.19.5 或更新**和匹配 26.3 的 Fabric API。验证版本为 Fabric API `0.161.0+26.3`。
 
-1. 停服，把 `build/libs/gacha-26.3-fabric-2.1.0.jar` 放入 `mods` 并替换旧 gacha JAR；不要安装 `-sources.jar`。
+1. 停服，把 `build/libs/gacha-26.3-fabric-2.2.0.jar` 放入 `mods` 并替换旧 gacha JAR；不要安装 `-sources.jar`。
 2. 本版配置格式为 `schemaVersion: 2`，不迁移旧配置。更新时用项目中的 `example-config.json` 覆盖服务器 `config/gacha/config.json`，然后重新设置区域和奖品。全新安装首次启动自动生成同样的配置。
 3. 玩家数据写入 `config/gacha/players/`，不读取或迁移旧 `players-v2/` 目录；若 `players/` 中已有旧格式玩家文件，更新时先移出该目录。原版 gacha 抽奖券仍可使用，所有奖池共用同一种单抽券和十连券。
 4. 默认货币奖励需要匹配 26.3 的 Fuji，启用 `economy` 并配置 `fuji:coffee_stamp`、`fuji:tongbao`。也可改成普通物品或其他有效指令。
@@ -53,6 +53,7 @@
 - 轮播是所有玩家共见的奖池展示，不随某名玩家的个人限额消失。未加载区块不会被轮播强制加载。
 - 投券后立即隐藏该池轮播；抽奖动画和结果方块清除后恢复。其他池的轮播不受影响。修改、重载、删除池或停服时清理旧模型。
 - 默认抽奖动画 100 tick（约 5 秒），混凝土闪动按蓝 50%、黄 30%、红 20% 展示；视觉颜色不决定抽奖结果。单抽默认位于区域顶部上方 2.5 格；十连保持原高度（下排上方 2 格，上排上方 2.9 格），上下两排、每排 5 个，从正面看上排左到右，再下排左到右。
+- 每池可通过 `fireworkDistance` 设置烟花左右距离：表示每侧烟花到展示中心的距离，默认 3.2 格，范围 0–64 格，支持小数。例如设为 5 时，左右各距中心 5 格，两侧相隔 10 格；方向随奖池朝向变化，中心包含展示偏移。
 - 揭晓后 S/A/B 变成红/黄/蓝，播放最高等级颜色的两侧烟花和音符盒音乐。烟花只产生视觉效果，不伤害玩家或方块。结果默认保留 40 tick（约 2 秒）。
 - 玩家同时只能进行一轮，同一池同时只能播放一轮；不同玩家可以在不同池同时抽奖。揭晓后下一轮可以替换尚未清除的上一轮结果。
 - 整叠投券只消耗 1 张，其余原样退回；忙碌期间的新券整叠退回原投掷者。抽奖券掉落实体不互相合并。
@@ -130,6 +131,7 @@ config/gacha/
 | 顶层 `schemaVersion` | 本版必须为 2 |
 | 顶层 `animationTicks`、`resultTicks` | 动画 20–1200 tick，结果 0–1200 tick |
 | 池 `dimension`、`minX/Y/Z`、`maxX/Y/Z` | 所在维度及投券区域，单边最多 65 格 |
+| 池 `fireworkDistance` | 每侧烟花距展示中心的距离，默认 3.2 格，范围 0–64 格；可在 `poolDefaults` 设置新池模板 |
 | 池 `displayOffsetX/Y/Z` | 每池相对默认展示位置的世界坐标偏移量，默认 0，范围 -64 至 64 格，可为小数；`poolDefaults` 也可设置新池模板偏移 |
 | 池 `displayFacing` | `+x/-x/+z/-z`，默认 +z |
 | 池 `sProbability`、`aProbability` | 非负绝对概率，总和不超过 1；B 为剩余概率 |
@@ -142,12 +144,13 @@ config/gacha/
 
 物品子奖励：`{"item":{"id":"minecraft:diamond","count":3}}`。货币子奖励：`{"command":"economy give %player% fuji:coffee_stamp 20"}`。Fuji 货币标识是经济账户 ID，不是物品注册 ID；实体货币道具请用 `sethand` 保存。
 
-例如让 `main` 的全部展示向东移动 1 格、向上移动 0.5 格，在 `pools.main` 中设置：
+例如让 `main` 的全部展示向东移动 1 格、向上移动 0.5 格，并让左右烟花各距中心 5 格，在 `pools.main` 中设置：
 
 ```json
 "displayOffsetX": 1.0,
 "displayOffsetY": 0.5,
-"displayOffsetZ": 0.0
+"displayOffsetZ": 0.0,
+"fireworkDistance": 5.0
 ```
 
 修改文件后执行 `/gacha reload`。重载失败保留当前生效配置；已开始的抽奖使用确定并保存的结果与奖励快照，不受之后的奖励表修改影响。
