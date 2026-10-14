@@ -1,4 +1,4 @@
-param([switch]$Offline)
+param([switch]$Offline, [string]$GradleExecutable)
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $testRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'build/run/fujiIntegration'))
@@ -8,6 +8,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $jarName))) {
     throw "Download the official Fuji 14.12.0 for Minecraft 26.3 into integration/$jarName first."
 }
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+$gachaRoot = Join-Path $testRoot 'config/gacha'
+New-Item -ItemType Directory -Path $gachaRoot -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $projectRoot 'example-config.json') -Destination (Join-Path $gachaRoot 'config.json') -Force
 Set-Content -LiteralPath (Join-Path $testRoot 'eula.txt') -Value 'eula=true' -Encoding utf8
 @'
 server-ip=127.0.0.1
@@ -41,7 +44,8 @@ Push-Location $projectRoot
 try {
     $arguments = @('runFujiIntegration', "-Pfuji_test_jar=integration/$jarName", '--console=plain')
     if ($Offline) { $arguments += '--offline' }
-    & .\gradlew.bat @arguments
+    if ($GradleExecutable) { & $GradleExecutable @arguments }
+    else { & .\gradlew.bat @arguments }
     if ($LASTEXITCODE -ne 0) { throw "Dedicated server exited with $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $resultPath)) { throw 'Integration server did not write a result' }
     $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json

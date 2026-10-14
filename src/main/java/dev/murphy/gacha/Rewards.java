@@ -42,8 +42,9 @@ final class Rewards {
         if (parsed.getReader().canRead() || ContextChain.tryFlatten(parsed.getContext().build(command)).isEmpty())
             throw new IllegalArgumentException("奖品指令无法执行，请检查 Fuji 模块/货币及配置：" + reward.command);
     }
-    static void validateAll(ServerPlayer player, GachaConfig config) {
+    static void validateAll(ServerPlayer player, GachaConfig.PoolRules config) {
         config.rewards.values().forEach(list -> list.forEach(prize -> prize.rewards.forEach(r -> validate(player, r))));
+        config.fixedRewards.values().forEach(list -> list.forEach(prize -> prize.rewards.forEach(r -> validate(player, r))));
     }
     static void give(ServerPlayer player, ItemStack original) {
         ItemStack stack = original.copy();

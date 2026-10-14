@@ -58,6 +58,15 @@ fabricApi {
         eula = true
     }
 }
+tasks.named('runGameTest') {
+    doFirst {
+        copy {
+            from('example-config.json')
+            into('build/run/gameTest/config/gacha')
+            rename { 'config.json' }
+        }
+    }
+}
 loom {
     runs {
         fujiIntegration {

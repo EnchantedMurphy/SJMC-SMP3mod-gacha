@@ -42,21 +42,24 @@ final class GachaCommands {
         root.then(Commands.literal("help").executes(c -> safe(c, () -> help(c.getSource(), 1)))
                 .then(Commands.argument("page", IntegerArgumentType.integer(1, 4))
                         .executes(c -> safe(c, () -> help(c.getSource(), IntegerArgumentType.getInteger(c, "page"))))));
-        root.then(Commands.literal("history").executes(c -> safe(c, () -> history(c.getSource(), 1)))
+        root.then(Commands.literal("history").then(poolArgument()
+                .executes(c -> safe(c, () -> history(c.getSource(), text(c, "pool"), 1, false)))
                 .then(Commands.argument("page", IntegerArgumentType.integer(1))
-                        .executes(c -> safe(c, () -> history(c.getSource(), IntegerArgumentType.getInteger(c, "page")))))
-                .then(Commands.literal("details").executes(c -> safe(c, () -> historyDetails(c.getSource(), 1)))
+                        .executes(c -> safe(c, () -> history(c.getSource(), text(c, "pool"), IntegerArgumentType.getInteger(c, "page"), false))))
+                .then(Commands.literal("details").executes(c -> safe(c, () -> history(c.getSource(), text(c, "pool"), 1, true)))
                         .then(Commands.argument("page", IntegerArgumentType.integer(1))
-                                .executes(c -> safe(c, () -> historyDetails(c.getSource(), IntegerArgumentType.getInteger(c, "page")))))));
-        root.then(Commands.literal("pity").executes(c -> safe(c, () -> {
-            mod.available(); ServerPlayer player = c.getSource().getPlayerOrException();
+                                .executes(c -> safe(c, () -> history(c.getSource(), text(c, "pool"), IntegerArgumentType.getInteger(c, "page"), true)))))));
+        root.then(Commands.literal("pity").then(poolArgument().executes(c -> safe(c, () -> {
+            mod.available(); ServerPlayer player = c.getSource().getPlayerOrException(); String pool = text(c, "pool");
             var data = mod.store.load(player.getUUID());
-            c.getSource().sendSuccess(() -> ChatUi.pity(data, mod.config.pity, mod.busyPlayer(player.getUUID())), false);
+            var rules = mod.config.pool(pool);
+            c.getSource().sendSuccess(() -> ChatUi.pity(PlayerStore.state(data, pool), rules.pity, mod.busyPlayer(player.getUUID())), false);
             return 1;
-        })));
-        root.then(Commands.literal("pending").executes(c -> safe(c, () -> pending(c.getSource(), c.getSource().getPlayerOrException())))
+        }))));
+        root.then(Commands.literal("pending").then(poolArgument()
+                .executes(c -> safe(c, () -> pending(c.getSource(), text(c, "pool"), c.getSource().getPlayerOrException())))
                 .then(Commands.argument("player", EntityArgument.player()).requires(GachaCommands::admin)
-                        .executes(c -> safe(c, () -> pending(c.getSource(), EntityArgument.getPlayer(c, "player"))))));
+                        .executes(c -> safe(c, () -> pending(c.getSource(), text(c, "pool"), EntityArgument.getPlayer(c, "player")))))));
         var give = Commands.literal("give").requires(GachaCommands::admin);
         for (String kind : List.of("single", "ten")) {
             int draws = kind.equals("ten") ? 10 : 1;
@@ -66,22 +69,17 @@ final class GachaCommands {
                             .executes(c -> safe(c, () -> give(c, draws, IntegerArgumentType.getInteger(c, "count")))))));
         }
         root.then(give);
-        var facing = Commands.literal("facing").then(facingDirections());
-        var axis = Commands.literal("axis");
-        var axisName = facingDirections();
-        for (String legacy : List.of("x", "z"))
-            axisName.then(Commands.literal(legacy).executes(c -> safe(c, () -> axis(c, legacy))));
-        axis.then(axisName);
-        root.then(Commands.literal("pool").requires(GachaCommands::admin)
-                .then(Commands.literal("set").then(Commands.argument("name", StringArgumentType.word())
+        var facing = Commands.literal("facing").requires(GachaCommands::admin).then(facingDirections());
+        root.then(Commands.literal("pool")
+                .then(Commands.literal("set").requires(GachaCommands::admin).then(Commands.argument("name", StringArgumentType.word())
                         .then(Commands.argument("from", BlockPosArgument.blockPos()).then(Commands.argument("to", BlockPosArgument.blockPos())
                                 .executes(c -> safe(c, () -> setPool(c)))))))
-                .then(Commands.literal("remove").then(Commands.argument("name", StringArgumentType.word()).executes(c -> safe(c, () -> {
+                .then(Commands.literal("remove").requires(GachaCommands::admin).then(Commands.argument("name", StringArgumentType.word()).executes(c -> safe(c, () -> {
                     mod.requireIdlePool(text(c, "name")); var config = mod.editable();
                     if (config.pools.remove(text(c, "name")) == null) throw new IllegalArgumentException("抽奖池不存在。");
                     mod.saveConfig(config); tell(c.getSource(), "抽奖池已删除。"); return 1;
                 }))))
-                .then(axis).then(facing)
+                .then(facing)
                 .then(Commands.literal("list").executes(c -> safe(c, () -> {
                     mod.available();
                     if (mod.config.pools.isEmpty()) tell(c.getSource(), "尚未设置抽奖池。用 /gacha pool set main <坐标1> <坐标2> 设置。");
@@ -90,46 +88,20 @@ final class GachaCommands {
                             + " · 面朝 " + p.facing().id));
                     return 1;
                 }))));
-        var reward = Commands.literal("reward").requires(GachaCommands::admin);
-        reward.then(Commands.literal("list").executes(c -> safe(c, () -> {
-            mod.available(); mod.config.rewards.forEach((tier, list) -> list.forEach(p -> tell(c.getSource(),
-                    "[" + tier + "] " + p.id + " · " + p.label + " · 权重 " + p.weight + " · 子奖励 " + p.rewards.size()))); return 1;
-        })));
-        var hand = Commands.literal("sethand");
-        var command = Commands.literal("setcommand").requires(GachaCommands::owner);
-        var remove = Commands.literal("remove");
-        for (Tier tier : Tier.values()) {
-            hand.then(Commands.literal(tier.name()).then(Commands.argument("id", StringArgumentType.word())
-                    .executes(c -> safe(c, () -> setHand(c, tier, 1)))
-                    .then(Commands.argument("weight", IntegerArgumentType.integer(1, 1_000_000))
-                            .executes(c -> safe(c, () -> setHand(c, tier, IntegerArgumentType.getInteger(c, "weight")))))));
-            command.then(Commands.literal(tier.name()).then(Commands.argument("id", StringArgumentType.word())
-                    .then(Commands.argument("label", StringArgumentType.string()).then(Commands.argument("command", StringArgumentType.greedyString())
-                            .executes(c -> safe(c, () -> {
-                                var player = c.getSource().getPlayerOrException();
-                                Reward r = Reward.command(text(c, "command")); Rewards.validate(player, r);
-                                replace(tier, Prize.of(text(c, "id"), text(c, "label"), r));
-                                tell(c.getSource(), "指令奖品已保存：" + text(c, "id")); return 1;
-                            }))))));
-            remove.then(Commands.literal(tier.name()).then(Commands.argument("id", StringArgumentType.word()).executes(c -> safe(c, () -> {
-                var config = mod.editable();
-                if (!config.rewards.get(tier).removeIf(p -> p.id.equals(text(c, "id")))) throw new IllegalArgumentException("奖品不存在。");
-                mod.saveConfig(config); tell(c.getSource(), "奖品已移除。"); return 1;
-            }))));
-        }
-        root.then(reward.then(hand).then(command).then(remove));
+        root.then(rewardCommands("reward", false));
+        root.then(rewardCommands("bonus", true));
         root.then(Commands.literal("reload").requires(GachaCommands::owner).executes(c -> safe(c, () -> {
             mod.reload(); tell(c.getSource(), "配置已重载，进行中的抽奖仍使用原结果。"); return 1;
         })));
-        root.then(Commands.literal("check").requires(GachaCommands::admin)
-                .executes(c -> safe(c, () -> check(c.getSource(), c.getSource().getPlayerOrException())))
+        root.then(Commands.literal("check").requires(GachaCommands::admin).then(poolArgument()
+                .executes(c -> safe(c, () -> check(c.getSource(), text(c, "pool"), c.getSource().getPlayerOrException())))
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(c -> safe(c, () -> check(c.getSource(), EntityArgument.getPlayer(c, "player"))))));
+                        .executes(c -> safe(c, () -> check(c.getSource(), text(c, "pool"), EntityArgument.getPlayer(c, "player")))))));
         var recovery = Commands.argument("player", EntityArgument.player()).then(Commands.argument("receipt", StringArgumentType.word())
                 .then(Commands.argument("action", IntegerArgumentType.integer(1))
                         .then(Commands.literal("retry").executes(c -> safe(c, () -> recover(c, false))))
                         .then(Commands.literal("done").executes(c -> safe(c, () -> recover(c, true))))));
-        root.then(Commands.literal("recover").requires(GachaCommands::owner).then(recovery));
+        root.then(Commands.literal("recover").requires(GachaCommands::owner).then(poolArgument().then(recovery)));
         dispatcher.register(root);
     }
     private int give(CommandContext<CommandSourceStack> c, int draws, int count) throws Exception {
@@ -144,18 +116,13 @@ final class GachaCommands {
     private int setPool(CommandContext<CommandSourceStack> c) throws Exception {
         String name = text(c, "name"); mod.requireIdlePool(name);
         BlockPos a = BlockPosArgument.getBlockPos(c, "from"), b = BlockPosArgument.getBlockPos(c, "to");
-        Pool pool = new Pool(); pool.dimension = c.getSource().getLevel().dimension().identifier().toString();
+        var config = mod.editable();
+        Pool pool = config.pools.getOrDefault(name, config.newPool()); pool.dimension = c.getSource().getLevel().dimension().identifier().toString();
         pool.minX = Math.min(a.getX(), b.getX()); pool.maxX = Math.max(a.getX(), b.getX());
         pool.minY = Math.min(a.getY(), b.getY()); pool.maxY = Math.max(a.getY(), b.getY());
         pool.minZ = Math.min(a.getZ(), b.getZ()); pool.maxZ = Math.max(a.getZ(), b.getZ());
-        var config = mod.editable(); config.pools.put(name, pool); mod.saveConfig(config);
+        config.pools.put(name, pool); mod.saveConfig(config);
         tell(c.getSource(), "抽奖池 " + name + " 已保存，区域含两个端点方块。展示位于区域顶部上方 2 格。"); return 1;
-    }
-    private int axis(CommandContext<CommandSourceStack> c, String axis) throws Exception {
-        mod.requireIdlePool(text(c, "name")); var config = mod.editable(); Pool p = config.pools.get(text(c, "name"));
-        if (p == null) throw new IllegalArgumentException("抽奖池不存在。");
-        p.displayAxis = axis; p.displayFacing = null;
-        mod.saveConfig(config); tell(c.getSource(), "展示横排方向已改为 " + axis.toUpperCase() + " 轴，面朝 " + p.facing().id + "。"); return 1;
     }
     private com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> facingDirections() {
         var name = Commands.argument("name", StringArgumentType.word());
@@ -166,26 +133,79 @@ final class GachaCommands {
     private int facing(CommandContext<CommandSourceStack> c, Facing facing) throws Exception {
         mod.requireIdlePool(text(c, "name")); var config = mod.editable(); Pool p = config.pools.get(text(c, "name"));
         if (p == null) throw new IllegalArgumentException("抽奖池不存在。");
-        p.displayFacing = facing.id; p.displayAxis = facing.rightX == 0 ? "z" : "x";
+        p.displayFacing = facing.id;
         mod.saveConfig(config); tell(c.getSource(), "展示面朝方向已改为 " + facing.id + "，正面看按上排左至右、下排左至右揭晓。"); return 1;
     }
-    private int setHand(CommandContext<CommandSourceStack> c, Tier tier, int weight) throws Exception {
-        var player = c.getSource().getPlayerOrException();
-        Reward r = Rewards.capture(player);
+    private com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> poolArgument() {
+        return Commands.argument("pool", StringArgumentType.word()).suggests((context, builder) -> {
+            if (mod.config != null) mod.config.pools.keySet().forEach(builder::suggest);
+            return builder.buildFuture();
+        });
+    }
+    private com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> rewardCommands(String name, boolean fixed) {
+        var root = Commands.literal(name).requires(GachaCommands::admin);
+        root.then(Commands.literal("list").then(poolArgument().executes(c -> safe(c, () -> {
+            mod.available(); Pool p = mod.config.pool(text(c, "pool"));
+            (fixed ? p.fixedRewards : p.rewards).forEach((tier, list) -> list.forEach(prize -> tell(c.getSource(),
+                    "[" + tier + "] " + prize.id + " · " + prize.label + (fixed ? " · 固定奖励" : " · 权重 " + prize.weight + " · 个人限额 " + prize.limit))));
+            return 1;
+        }))));
+        var hand = Commands.literal("sethand"); var handPool = poolArgument();
+        var command = Commands.literal("setcommand").requires(GachaCommands::owner); var commandPool = poolArgument();
+        var remove = Commands.literal("remove"); var removePool = poolArgument();
+        var limit = Commands.literal("limit"); var limitPool = poolArgument();
+        for (Tier tier : Tier.values()) {
+            var id = Commands.argument("id", StringArgumentType.word())
+                    .executes(c -> safe(c, () -> setHand(c, tier, fixed, 1, -1)));
+            if (!fixed) id.then(Commands.argument("weight", IntegerArgumentType.integer(1, 1_000_000))
+                    .executes(c -> safe(c, () -> setHand(c, tier, false, IntegerArgumentType.getInteger(c, "weight"), -1)))
+                    .then(Commands.argument("limit", IntegerArgumentType.integer(-1))
+                            .executes(c -> safe(c, () -> setHand(c, tier, false, IntegerArgumentType.getInteger(c, "weight"), IntegerArgumentType.getInteger(c, "limit"))))));
+            handPool.then(Commands.literal(tier.name()).then(id));
+            commandPool.then(Commands.literal(tier.name()).then(Commands.argument("id", StringArgumentType.word())
+                    .then(Commands.argument("label", StringArgumentType.string()).then(Commands.argument("command", StringArgumentType.greedyString())
+                            .executes(c -> safe(c, () -> {
+                                var player = c.getSource().getPlayerOrException();
+                                Reward r = Reward.command(text(c, "command")); Rewards.validate(player, r);
+                                replace(text(c, "pool"), tier, fixed, Prize.of(text(c, "id"), text(c, "label"), r));
+                                tell(c.getSource(), "指令奖励已保存：" + text(c, "id")); return 1;
+                            }))))));
+            removePool.then(Commands.literal(tier.name()).then(Commands.argument("id", StringArgumentType.word()).executes(c -> safe(c, () -> {
+                String pool = text(c, "pool"); mod.requireIdlePool(pool); var config = mod.editable(); Pool p = config.pool(pool);
+                if (!(fixed ? p.fixedRewards : p.rewards).get(tier).removeIf(prize -> prize.id.equals(text(c, "id")))) throw new IllegalArgumentException("奖品不存在。");
+                mod.saveConfig(config); tell(c.getSource(), "奖励已移除。"); return 1;
+            }))));
+            limitPool.then(Commands.literal(tier.name()).then(Commands.argument("id", StringArgumentType.word())
+                    .then(Commands.argument("limit", IntegerArgumentType.integer(-1)).executes(c -> safe(c, () -> {
+                        String pool = text(c, "pool"); mod.requireIdlePool(pool); var config = mod.editable();
+                        Prize prize = config.pool(pool).rewards.get(tier).stream().filter(p -> p.id.equals(text(c, "id"))).findFirst()
+                                .orElseThrow(() -> new IllegalArgumentException("奖品不存在。"));
+                        prize.limit = IntegerArgumentType.getInteger(c, "limit"); mod.saveConfig(config);
+                        tell(c.getSource(), "个人奖励限额已保存；已有获取次数保留。"); return 1;
+                    })))));
+        }
+        root.then(hand.then(handPool)).then(command.then(commandPool)).then(remove.then(removePool));
+        if (!fixed) root.then(limit.then(limitPool));
+        return root;
+    }
+    private int setHand(CommandContext<CommandSourceStack> c, Tier tier, boolean fixed, int weight, int limit) throws Exception {
+        var player = c.getSource().getPlayerOrException(); Reward r = Rewards.capture(player);
         Prize prize = Prize.of(text(c, "id"), player.getMainHandItem().getHoverName().getString() + " ×" + player.getMainHandItem().getCount(), r);
-        prize.weight = weight; replace(tier, prize); tell(c.getSource(), "主手奖品已保存：" + prize.id + "（数量及完整物品组件）。"); return 1;
+        prize.weight = weight; prize.limit = limit; replace(text(c, "pool"), tier, fixed, prize);
+        tell(c.getSource(), "主手奖励已保存：" + prize.id + "（数量及完整物品组件）。"); return 1;
     }
-    private void replace(Tier tier, Prize prize) throws Exception {
-        var config = mod.editable(); config.rewards.get(tier).removeIf(p -> p.id.equals(prize.id)); config.rewards.get(tier).add(prize);
-        mod.saveConfig(config);
+    private void replace(String pool, Tier tier, boolean fixed, Prize prize) throws Exception {
+        mod.requireIdlePool(pool); var config = mod.editable(); Pool p = config.pool(pool);
+        var list = (fixed ? p.fixedRewards : p.rewards).get(tier);
+        list.removeIf(old -> old.id.equals(prize.id)); list.add(prize); mod.saveConfig(config);
     }
-    private int check(CommandSourceStack source, ServerPlayer player) {
-        mod.available(); Rewards.validateAll(player, mod.config);
-        tell(source, "所有物品和奖品指令解析通过。Fuji 货币的实际增额请在安装 Fuji 的测试服验证。"); return 1;
+    private int check(CommandSourceStack source, String pool, ServerPlayer player) {
+        mod.available(); Rewards.validateAll(player, mod.config.pool(pool));
+        tell(source, "该池随机与固定额外奖励解析通过。Fuji 货币实际增额需在安装 Fuji 的测试服验证。"); return 1;
     }
-    private int pending(CommandSourceStack source, ServerPlayer player) throws Exception {
-        mod.available(); var data = mod.store.load(player.getUUID()); int count = 0;
-        for (var r : data.receipts) for (int i = 0; i < r.actions.size(); i++) {
+    private int pending(CommandSourceStack source, String pool, ServerPlayer player) throws Exception {
+        mod.available(); mod.config.pool(pool); var data = mod.store.load(player.getUUID()); int count = 0;
+        for (var r : data.receipts) if (pool.equals(r.pool)) for (int i = 0; i < r.actions.size(); i++) {
             var a = r.actions.get(i);
             if (a.status != PlayerStore.Status.DONE) {
                 tell(source, "记录 " + r.id + " · 动作 " + (i + 1) + " · " + a.status + " · " + a.detail); count++;
@@ -199,6 +219,7 @@ final class GachaCommands {
         mod.available(); ServerPlayer player = EntityArgument.getPlayer(c, "player");
         if (mod.busyPlayer(player.getUUID())) throw new IllegalArgumentException("该玩家正在抽奖，请等结果揭晓。");
         var data = mod.store.load(player.getUUID()); var receipt = PlayerStore.receipt(data, text(c, "receipt"));
+        if (!text(c, "pool").equals(receipt.pool)) throw new IllegalArgumentException("该领取记录不属于指定奖池。");
         int index = IntegerArgumentType.getInteger(c, "action") - 1;
         if (index >= receipt.actions.size()) throw new IllegalArgumentException("动作序号超出范围。");
         var a = receipt.actions.get(index);
@@ -209,16 +230,10 @@ final class GachaCommands {
         mod.store.save(data); mod.queueDelivery(player.getUUID());
         tell(c.getSource(), done ? "该动作已标记为发放完成。" : "该动作将在下一秒重试，请确保此前未发放以免重复。"); return 1;
     }
-    private int history(CommandSourceStack source, int page) throws Exception {
-        mod.available();
+    private int history(CommandSourceStack source, String pool, int page, boolean details) throws Exception {
+        mod.available(); mod.config.pool(pool);
         var data = mod.store.load(source.getPlayerOrException().getUUID());
-        ChatUi.history(data, page).forEach(line -> source.sendSuccess(() -> line, false));
-        return 1;
-    }
-    private int historyDetails(CommandSourceStack source, int page) throws Exception {
-        mod.available();
-        var data = mod.store.load(source.getPlayerOrException().getUUID());
-        ChatUi.historyDetails(data, page).forEach(line -> source.sendSuccess(() -> line, false));
+        (details ? ChatUi.historyDetails(data, pool, page) : ChatUi.history(data, pool, page)).forEach(line -> source.sendSuccess(() -> line, false));
         return 1;
     }
     private static int help(CommandSourceStack source, int page) {

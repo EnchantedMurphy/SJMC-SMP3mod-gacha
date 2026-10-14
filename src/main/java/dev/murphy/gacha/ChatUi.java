@@ -29,7 +29,7 @@ final class ChatUi {
         return switch (tier) { case S -> ChatFormatting.RED; case A -> ChatFormatting.YELLOW; case B -> ChatFormatting.BLUE; };
     }
     private static Component number(long n) { return Component.literal(Long.toString(n)).withStyle(s -> s.withColor(ORANGE)); }
-    static Component pity(PlayerStore.Data data, int pity, boolean busy) {
+    static Component pity(PlayerStore.PoolData data, int pity, boolean busy) {
         return Component.literal("连续未获S：").withStyle(ChatFormatting.YELLOW)
                 .append(number(data.misses)).append(" 抽；最多再抽 ").append(number(Math.max(1, pity - data.misses)))
                 .append(" 次必得S。累计 ").append(number(data.totalDraws)).append(" 抽。")
@@ -44,10 +44,10 @@ final class ChatUi {
         }
         return message;
     }
-    static List<History> historyRows(PlayerStore.Data data) {
+    static List<History> historyRows(PlayerStore.Data data, String pool) {
         List<History> rows = new ArrayList<>();
         long sinceS = 0;
-        for (var receipt : data.receipts) for (var draw : receipt.draws) {
+        for (var receipt : data.receipts) if (pool.equals(receipt.pool)) for (var draw : receipt.draws) {
             rows.add(new History(draw, receipt, ++sinceS));
             if (draw.tier == Tier.S) sinceS = 0;
         }
@@ -80,13 +80,13 @@ final class ChatUi {
             if (index >= pages.get(i).start() && index < pages.get(i).end()) return i + 1;
         return 1;
     }
-    static List<Component> history(PlayerStore.Data data, int page) {
-        var rows = historyRows(data);
+    static List<Component> history(PlayerStore.Data data, String pool, int page) {
+        var rows = historyRows(data, pool);
         var pageRanges = historyPages(rows);
         int pages = pageRanges.size();
         if (page < 1 || page > pages) throw new IllegalArgumentException("页码超出范围，共 " + pages + " 页。");
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
+        lines.add(Component.literal("个人抽奖历史 · " + pool + " · 第 " + page + "/" + pages + " 页 · 共 " + PlayerStore.state(data, pool).totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
         lines.add(Component.literal("■ B  ").withStyle(color(Tier.B)).append(Component.literal("■ A  ").withStyle(color(Tier.A)))
                 .append(Component.literal("■ S").withStyle(color(Tier.S))));
         var range = pageRanges.get(page - 1);
@@ -107,16 +107,16 @@ final class ChatUi {
         if (columns > 0) blockLines.add(line);
         for (int i = blockLines.size() - 1; i >= 0; i--) lines.add(blockLines.get(i));
         if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));
-        lines.add(navigation(page, pages, UiActions::history).copy().append("  ")
-                .append(button("[详细历史]", UiActions.historyDetails(offset / DETAILS_PAGE_SIZE + 1), "查看此页最新一抽起的详细记录")));
+        lines.add(navigation(page, pages, p -> UiActions.history(pool, p)).copy().append("  ")
+                .append(button("[详细历史]", UiActions.historyDetails(pool, offset / DETAILS_PAGE_SIZE + 1), "查看此页最新一抽起的详细记录")));
         return lines;
     }
-    static List<Component> historyDetails(PlayerStore.Data data, int page) {
-        var rows = historyRows(data);
+    static List<Component> historyDetails(PlayerStore.Data data, String pool, int page) {
+        var rows = historyRows(data, pool);
         int pages = (int) Math.max(1, (rows.size() + (long) DETAILS_PAGE_SIZE - 1) / DETAILS_PAGE_SIZE);
         if (page < 1 || page > pages) throw new IllegalArgumentException("页码超出范围，共 " + pages + " 页。");
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.literal("个人抽奖历史 · 第 " + page + "/" + pages + " 页 · 共 " + data.totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
+        lines.add(Component.literal("个人抽奖历史 · " + pool + " · 第 " + page + "/" + pages + " 页 · 共 " + PlayerStore.state(data, pool).totalDraws + " 抽").withStyle(ChatFormatting.GOLD));
         int offset = (page - 1) * DETAILS_PAGE_SIZE;
         for (int i = offset; i < Math.min(rows.size(), offset + (long) DETAILS_PAGE_SIZE); i++) {
             var row = rows.get(rows.size() - 1 - i); var draw = row.draw();
@@ -128,8 +128,8 @@ final class ChatUi {
                             + TIME.format(Instant.parse(row.receipt().timestamp))).withStyle(ChatFormatting.GRAY)));
         }
         if (rows.isEmpty()) lines.add(Component.literal("尚无抽奖记录。").withStyle(ChatFormatting.GRAY));
-        lines.add(navigation(page, pages, UiActions::historyDetails).copy().append("  ")
-                .append(button("[方块历史]", UiActions.history(historyPageForDraw(rows, rows.size() - 1 - offset)), "返回包含当前记录的方块历史")));
+        lines.add(navigation(page, pages, p -> UiActions.historyDetails(pool, p)).copy().append("  ")
+                .append(button("[方块历史]", UiActions.history(pool, historyPageForDraw(rows, rows.size() - 1 - offset)), "返回包含当前记录的方块历史")));
         return lines;
     }
     private static Component button(String label, ClickEvent action, String hover) {
@@ -159,10 +159,11 @@ final class ChatUi {
             case 1 -> {
                 lines.add(Component.literal("将券投掷到抽奖池，等待约 5 秒即可领取奖品。").withStyle(ChatFormatting.YELLOW));
                 lines.add(Component.literal("整叠仅用 1 张，余券退回；抽奖期间投入的券也会退回。").withStyle(ChatFormatting.GRAY));
-                command(lines, "history [页码]", "三色方块历史，每页约100抽，保留完整行，可翻页或切换详细历史");
-                command(lines, "history details [页码]", "详细历史，每页10抽");
-                command(lines, "pity", "查看距离必得 S 的抽数");
-                command(lines, "pending", "查看待领取或异常奖励");
+                command(lines, "pool list", "查看可用抽奖池名称");
+                command(lines, "history <池名> [页码]", "三色方块历史，每页约100抽，保留完整行，可翻页或切换详细历史");
+                command(lines, "history <池名> details [页码]", "详细历史，每页10抽");
+                command(lines, "pity <池名>", "查看距离必得 S 的抽数");
+                command(lines, "pending <池名>", "查看待领取或异常奖励");
             }
             case 2 -> {
                 lines.add(Component.literal("发放抽奖券（数量指券数，省略为 1）").withStyle(ChatFormatting.YELLOW));
@@ -176,19 +177,24 @@ final class ChatUi {
             }
             case 3 -> {
                 lines.add(Component.literal("等级填写 S、A 或 B；同 ID 会替换原奖品。").withStyle(ChatFormatting.YELLOW));
-                command(lines, "reward list", "查看奖品 ID、等级与权重");
-                command(lines, "reward sethand <等级> <ID> [权重]", "保存主手整叠物品，不消耗物品");
-                command(lines, "reward remove <等级> <ID>", "删除奖品，每个等级至少保留一个");
-                command(lines, "check [玩家]", "检查奖品配置，后台需指定玩家");
-                command(lines, "pending <玩家>", "查看该玩家待领取或异常记录");
+                command(lines, "reward list <池名>", "查看奖品 ID、等级与权重");
+                command(lines, "reward sethand <池名> <等级> <ID> [权重] [限额]", "保存主手整叠物品，不消耗物品");
+                command(lines, "reward remove <池名> <等级> <ID>", "删除随机奖品，可清空");
+                command(lines, "reward limit <池名> <等级> <ID> <次数>", "个人限额，-1 无限、0 禁用");
+                command(lines, "bonus sethand <池名> <等级> <ID>", "添加固定额外物品");
+                command(lines, "bonus list <池名>", "查看固定额外奖励");
+                command(lines, "bonus remove <池名> <等级> <ID>", "删除固定额外奖励");
+                command(lines, "check <池名> [玩家]", "检查奖品配置，后台需指定玩家");
+                command(lines, "pending <池名> <玩家>", "查看该玩家待领取或异常记录");
             }
             case 4 -> {
-                command(lines, "reward setcommand <等级> <ID> <名称> <指令>", "添加指令奖品，需游戏内执行");
+                command(lines, "reward setcommand <池名> <等级> <ID> <名称> <指令>", "添加指令奖品，需游戏内执行");
                 lines.add(Component.literal("名称有空格时加双引号；指令不带 /，玩家名用 %player%。").withStyle(ChatFormatting.GRAY));
+                command(lines, "bonus setcommand <池名> <等级> <ID> <名称> <指令>", "添加固定额外指令奖励");
                 command(lines, "reload", "重载 config/gacha/config.json");
                 lines.add(Component.literal("异常奖励：先核对实际物品或余额，再选择恢复方式。").withStyle(ChatFormatting.YELLOW));
-                command(lines, "recover <玩家> <记录UUID> <动作序号> retry", "确认未发放后重试");
-                command(lines, "recover <玩家> <记录UUID> <动作序号> done", "确认已发放后标记完成");
+                command(lines, "recover <池名> <玩家> <记录UUID> <动作序号> retry", "确认未发放后重试");
+                command(lines, "recover <池名> <玩家> <记录UUID> <动作序号> done", "确认已发放后标记完成");
             }
         }
         if (pages > 1) {

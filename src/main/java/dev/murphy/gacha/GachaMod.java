@@ -42,6 +42,8 @@ public final class GachaMod implements DedicatedServerModInitializer {
     private boolean delivering;
     private final RandomGenerator oddsRandom = new java.security.SecureRandom();
     private final RandomGenerator fxRandom = new java.util.Random();
+    private final Map<String, GachaPreview> previews = new HashMap<>();
+    private final Set<String> invalidPreviews = new HashSet<>();
     private final Map<UUID, Session> sessions = new HashMap<>();
     private final ArrayList<Finished> finished = new ArrayList<>();
     private final Set<UUID> pendingPlayers = new HashSet<>();
@@ -66,7 +68,7 @@ public final class GachaMod implements DedicatedServerModInitializer {
             active = this;
             try {
                 loadConfiguration();
-                store = new PlayerStore(directory().resolve("players"));
+                store = new PlayerStore(directory().resolve("players-v2"));
                 LOGGER.info("抽奖模组已加载，数据目录：{}", directory());
             } catch (Exception e) {
                 store = null; config = null;
@@ -81,6 +83,7 @@ public final class GachaMod implements DedicatedServerModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             sessions.values().forEach(s -> { if (s.animation != null) s.animation.clear(); });
             finished.forEach(f -> f.animation.clear());
+            clearPreviews();
             // Outcomes are already journaled. Complete online deliveries before players disconnect.
             sessions.clear(); finished.clear();
             for (ServerPlayer player : server.getPlayerList().getPlayers()) deliverPending(player);
@@ -110,8 +113,9 @@ public final class GachaMod implements DedicatedServerModInitializer {
                 mod.available();
                 // Always use the actual sender's UUID, never a client-selected player.
                 var data = mod.store.load(player.getUUID());
+                mod.config.pool(request.pool());
                 var lines = request.action() == UiActions.Action.HISTORY_DETAILS
-                        ? ChatUi.historyDetails(data, request.page()) : ChatUi.history(data, request.page());
+                        ? ChatUi.historyDetails(data, request.pool(), request.page()) : ChatUi.history(data, request.pool(), request.page());
                 lines.forEach(player::sendSystemMessage);
             } else ChatUi.help(source, request.page()).forEach(player::sendSystemMessage);
         } catch (Exception e) {
@@ -128,19 +132,19 @@ public final class GachaMod implements DedicatedServerModInitializer {
         GachaConfig next = Files.exists(path) ? JsonFiles.read(path, GachaConfig.class) : GachaConfig.defaults();
         next.validate();
         if (!Files.exists(path)) JsonFiles.write(path, next);
-        config = next;
+        clearPreviews(); config = next;
     }
     void reload() throws IOException {
         if (delivering) throw new IllegalArgumentException("发奖时不可重载配置。");
         loadConfiguration();
-        if (store == null) store = new PlayerStore(directory().resolve("players"));
+        if (store == null) store = new PlayerStore(directory().resolve("players-v2"));
     }
     GachaConfig editable() {
         available();
         return JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(config), GachaConfig.class);
     }
     void saveConfig(GachaConfig next) throws IOException {
-        next.validate(); JsonFiles.write(directory().resolve("config.json"), next); config = next;
+        next.validate(); JsonFiles.write(directory().resolve("config.json"), next); clearPreviews(); config = next;
     }
     boolean busyPlayer(UUID uuid) { return sessions.containsKey(uuid); }
     boolean busyPool(String pool) { return sessions.values().stream().anyMatch(s -> s.pool.equals(pool)); }
@@ -189,10 +193,46 @@ public final class GachaMod implements DedicatedServerModInitializer {
             if (++f.ticks >= f.lifetime) { f.animation.clear(); return true; }
             return false;
         });
+        tickPreviews(server);
         if (server.getTickCount() % 20 == 0) {
             for (UUID uuid : Set.copyOf(pendingPlayers)) {
                 ServerPlayer player = server.getPlayerList().getPlayer(uuid);
                 if (player != null) deliverPending(player);
+            }
+        }
+    }
+
+    private void hidePreview(String pool) {
+        GachaPreview preview = previews.remove(pool);
+        if (preview != null) preview.clear();
+    }
+    private void clearPreviews() {
+        previews.values().forEach(GachaPreview::clear); previews.clear(); invalidPreviews.clear();
+    }
+    private void tickPreviews(MinecraftServer server) {
+        previews.keySet().removeIf(name -> {
+            if (!config.pools.containsKey(name)) { previews.get(name).clear(); return true; }
+            return false;
+        });
+        for (var entry : config.pools.entrySet()) {
+            String name = entry.getKey(); Pool pool = entry.getValue();
+            ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, Identifier.parse(pool.dimension)));
+            boolean loaded = level != null && level.getChunkSource().getChunkNow(
+                    net.minecraft.util.Mth.floor((pool.minX + (double) pool.maxX + 1) / 2) >> 4,
+                    net.minecraft.util.Mth.floor((pool.minZ + (double) pool.maxZ + 1) / 2) >> 4) != null;
+            if (!loaded || busyPool(name) || finished.stream().anyMatch(f -> f.pool.equals(name))) { hidePreview(name); continue; }
+            if (invalidPreviews.contains(name)) continue;
+            try {
+                GachaPreview preview = previews.get(name);
+                if (preview == null || preview.removed()) {
+                    hidePreview(name); preview = new GachaPreview(level, pool);
+                    if (preview.empty()) { invalidPreviews.add(name); continue; }
+                    previews.put(name, preview);
+                }
+                preview.tick();
+            } catch (RuntimeException e) {
+                hidePreview(name); invalidPreviews.add(name);
+                LOGGER.warn("奖池 {} 的物品展示无法创建，修复后重载配置。", name, e);
             }
         }
     }
@@ -209,26 +249,28 @@ public final class GachaMod implements DedicatedServerModInitializer {
                 entity.discard(); pendingPlayers.add(uuid); return;
             }
             if (player == null || busyPlayer(uuid) || busyPool(pool)) {
-                refund(level, entity, data);
+                refund(level, entity, data, pool);
                 if (player != null) {
                     deliverPending(player);
                     player.sendSystemMessage(Component.literal("抽奖尚未结束，抽奖券已退回。").withStyle(ChatFormatting.YELLOW));
                 }
                 return;
             }
-            try { Rewards.validateAll(player, config); }
+            try { Rewards.validateAll(player, config.pool(pool)); }
             catch (RuntimeException e) {
-                refund(level, entity, data); deliverPending(player);
+                refund(level, entity, data, pool); deliverPending(player);
                 player.sendSystemMessage(Component.literal("奖池配置未就绪，抽奖券已退回，请联系管理员。").withStyle(ChatFormatting.RED));
                 LOGGER.warn("拒绝抽奖：{}", e.getMessage()); return;
             }
             int draws = Tickets.draws(entity.getItem());
             GachaConfig.Reward remainder = entity.getItem().getCount() > 1
                     ? Rewards.encode(player, entity.getItem().copyWithCount(entity.getItem().getCount() - 1)) : null;
-            var results = DrawEngine.roll(config, data.misses, draws, oddsRandom);
+            var poolData = PlayerStore.state(data, pool);
+            var results = DrawEngine.roll(config.pool(pool), poolData.misses, poolData.obtained, draws, oddsRandom);
             PlayerStore.Receipt receipt = store.reserve(data, player.getGameProfile().name(), entity.getUUID(), pool, results, remainder);
             // The whole entity is consumed; only one ticket is used and the remainder is journaled for return.
             entity.discard();
+            hidePreview(pool);
             Session session = new Session(); session.player = uuid; session.pool = pool; session.receipt = receipt.id;
             session.animationTicks = config.animationTicks; session.resultTicks = config.resultTicks;
             session.draws = new ArrayList<>(receipt.draws); sessions.put(uuid, session);
@@ -243,9 +285,9 @@ public final class GachaMod implements DedicatedServerModInitializer {
             if (player != null) player.sendSystemMessage(Component.literal("抽奖数据读写异常，请联系管理员。已确定的奖品会保留在领取记录中。").withStyle(ChatFormatting.RED));
         }
     }
-    private void refund(ServerLevel level, ItemEntity entity, PlayerStore.Data data) throws IOException {
+    private void refund(ServerLevel level, ItemEntity entity, PlayerStore.Data data, String pool) throws IOException {
         var item = ItemStack.CODEC.encodeStart(level.registryAccess().createSerializationContext(JsonOps.INSTANCE), entity.getItem()).getOrThrow();
-        store.refund(data, entity.getUUID(), Reward.item(item));
+        store.refund(data, entity.getUUID(), pool, Reward.item(item));
         entity.discard(); pendingPlayers.add(UUID.fromString(data.uuid));
     }
     private void deliverAction(ServerPlayer player, PlayerStore.Data data, PlayerStore.Receipt receipt, int index) throws IOException {

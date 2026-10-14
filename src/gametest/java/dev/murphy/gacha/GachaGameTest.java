@@ -70,6 +70,37 @@ public final class GachaGameTest {
         for (var entity : level.getAllEntities()) if (entity instanceof Display.BlockDisplay display && display.entityTags().contains(GachaAnimation.FX_TAG)) list.add(display);
         return list;
     }
+    private static List<Display.ItemDisplay> previews(ServerLevel level, Pool pool) {
+        List<Display.ItemDisplay> list = new ArrayList<>();
+        double x = (pool.minX + (double) pool.maxX + 1) / 2, z = (pool.minZ + (double) pool.maxZ + 1) / 2;
+        for (var entity : level.getAllEntities()) if (entity instanceof Display.ItemDisplay display
+                && display.entityTags().contains(GachaAnimation.FX_TAG) && !display.isRemoved()
+                && Math.abs(display.getX() - x) < .01 && Math.abs(display.getZ() - z) < .01) list.add(display);
+        return list;
+    }
+    @GameTest(maxTicks = 20)
+    public void previewRotatesCyclesItemsAndCleansUp(GameTestHelper helper) {
+        Pool pool = GachaConfig.defaults().newPool(); BlockPos anchor = helper.absolutePos(new BlockPos(1, 3, 1));
+        pool.minX = pool.maxX = anchor.getX(); pool.minY = pool.maxY = anchor.getY(); pool.minZ = pool.maxZ = anchor.getZ();
+        pool.rewards.put(Tier.S, new ArrayList<>(GachaConfig.defaultRules().rewards.get(Tier.A).subList(0, 2)));
+        var preview = new GachaPreview(helper.getLevel(), pool);
+        try {
+            var display = previews(helper.getLevel(), pool).getFirst();
+            helper.assertTrue(display.getY() == anchor.getY() + 2 && display.getItemStack().is(Items.DIAMOND), "preview positioned two blocks above pool");
+            var originalMetadata = display.getEntityData().getNonDefaultValues();
+            for (int i = 0; i < 20; i++) preview.tick();
+            helper.assertTrue(!originalMetadata.equals(display.getEntityData().getNonDefaultValues()), "rotation updates vanilla metadata");
+            for (int i = 20; i < 80; i++) preview.tick();
+            helper.assertTrue(display.getItemStack().is(Items.GOLD_INGOT), "cycles to second random S item");
+            for (int i = 0; i < 80; i++) preview.tick();
+            helper.assertTrue(display.getItemStack().is(Items.DIAMOND), "cycles back to first item");
+        } finally { preview.clear(); }
+        helper.assertTrue(previews(helper.getLevel(), pool).isEmpty(), "preview cleanup discards entity");
+        pool.rewards.get(Tier.S).clear();
+        var empty = new GachaPreview(helper.getLevel(), pool);
+        helper.assertTrue(empty.empty() && previews(helper.getLevel(), pool).isEmpty(), "no item model for command-only or empty S table");
+        helper.succeed();
+    }
     private static void click(RecordingPlayer player, net.minecraft.network.chat.ClickEvent.Custom action) {
         player.messages.clear();
         var json = net.minecraft.network.chat.ClickEvent.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, action).getOrThrow();
@@ -82,15 +113,16 @@ public final class GachaGameTest {
         try { action.run(); } catch (RuntimeException e) { throw e; } catch (Exception e) { throw new IllegalStateException(e); }
     }
 
-    @GameTest(maxTicks = 400)
+    @GameTest(maxTicks = 600)
     public void ticketsAnimationRefundHistoryAndReconnect(GameTestHelper helper) {
         var mod = GachaMod.active(); var server = helper.getLevel().getServer();
         var original = mod.config;
-        var config = GachaConfig.defaults(); config.sProbability = 1; config.aProbability = 0; config.pools.clear();
+        var config = GachaConfig.defaults(); config.poolDefaults.sProbability = 1; config.poolDefaults.aProbability = 0; config.pools.clear();
         config.resultTicks = 20;
-        var diamond = GachaConfig.defaults().rewards.get(Tier.A).getFirst().rewards.getFirst();
-        config.rewards.put(Tier.S, new ArrayList<>(List.of(Prize.of("bundle", "钻石+绿宝石", diamond, Reward.command("give %player% minecraft:emerald 1")))));
-        config.rewards.put(Tier.B, new ArrayList<>(List.of(Prize.of("iron", "铁锭", GachaConfig.defaults().rewards.get(Tier.A).getLast().rewards.getFirst()))));
+        config.poolDefaults.fixedRewards.values().forEach(List::clear);
+        var diamond = GachaConfig.defaults().poolDefaults.rewards.get(Tier.A).getFirst().rewards.getFirst();
+        config.poolDefaults.rewards.put(Tier.S, new ArrayList<>(List.of(Prize.of("bundle", "钻石+绿宝石", diamond, Reward.command("give %player% minecraft:emerald 1")))));
+        config.poolDefaults.rewards.put(Tier.B, new ArrayList<>(List.of(Prize.of("iron", "铁锭", GachaConfig.defaults().poolDefaults.rewards.get(Tier.A).getLast().rewards.getFirst()))));
         checked(() -> mod.saveConfig(config));
         BlockPos anchor = helper.absolutePos(new BlockPos(3, 2, 3));
         String bounds = anchor.getX() + " " + anchor.getY() + " " + anchor.getZ() + " "
@@ -104,6 +136,8 @@ public final class GachaGameTest {
         helper.assertTrue(tickets(second, 10) == 1, "admin gives vanilla ticket through command");
         ItemEntity stack = drop(first[0], pool, Tickets.create(1, 3));
         ItemEntity[] extra = new ItemEntity[2];
+        Pool[] quotaPool = new Pool[1];
+        int[] before = new int[2];
         float health = first[0].getHealth();
         helper.onEachTick(() -> {
             for (var display : displays(helper.getLevel())) {
@@ -118,14 +152,15 @@ public final class GachaGameTest {
             helper.assertTrue(tickets(first[0], 1) == 2, "stack throws consume one and refund the other two");
             helper.assertTrue(count(first[0], Items.DIAMOND) == 0, "prizes wait for reveal");
             helper.assertTrue(displays(helper.getLevel()).size() == 1, "single draw displays one miniature vanilla entity");
+            helper.assertTrue(previews(helper.getLevel(), pool).isEmpty(), "idle model hidden during animation");
             extra[0] = drop(first[0], pool, Tickets.create(10, 1));
             extra[1] = drop(second, pool, Tickets.create(1, 2));
         }));
         helper.runAtTickTime(14, () -> checked(() -> {
             helper.assertTrue(extra[0].isRemoved() && extra[1].isRemoved(), "busy tickets disappear from region");
             helper.assertTrue(tickets(first[0], 10) == 1 && tickets(second, 1) == 2, "busy refunds go to both owners");
-            helper.assertTrue(mod.store.load(firstProfile.id()).totalDraws == 1, "busy returns do not increment draw counter");
-            helper.assertTrue(mod.store.load(second.getUUID()).totalDraws == 0, "player histories remain independent");
+            helper.assertTrue(PlayerStore.state(mod.store.load(firstProfile.id()), "test").totalDraws == 1, "busy returns do not increment draw counter");
+            helper.assertTrue(PlayerStore.state(mod.store.load(second.getUUID()), "test").totalDraws == 0, "player histories remain independent");
             // No throwing owner means a hopper or dropper cannot trigger a draw.
             ItemEntity unowned = new ItemEntity(helper.getLevel(), pool.minX + 0.5, pool.minY + 0.5, pool.minZ + 0.5, Tickets.create(1, 1));
             unowned.setNoGravity(true); unowned.setPickUpDelay(1000); helper.getLevel().addFreshEntity(unowned);
@@ -141,6 +176,7 @@ public final class GachaGameTest {
         }));
         helper.runAtTickTime(128, () -> {
             helper.assertTrue(displays(helper.getLevel()).isEmpty(), "old result entities cleaned up");
+            helper.assertTrue(previews(helper.getLevel(), pool).size() == 1, "idle model returns after result cleanup");
             drop(first[0], pool, Tickets.create(10, 1));
         });
         helper.runAtTickTime(136, () -> {
@@ -148,8 +184,8 @@ public final class GachaGameTest {
             leave(first[0]);
         });
         helper.runAtTickTime(240, () -> checked(() -> {
-            var data = new PlayerStore(GachaMod.directory().resolve("players")).load(firstProfile.id());
-            helper.assertTrue(data.totalDraws == 11, "all outcomes persist before offline reveal");
+            var data = new PlayerStore(GachaMod.directory().resolve("players-v2")).load(firstProfile.id());
+            helper.assertTrue(PlayerStore.state(data, "test").totalDraws == 11, "all outcomes persist before offline reveal");
             helper.assertTrue(data.receipts.getLast().actions.stream().allMatch(a -> a.status == PlayerStore.Status.READY), "offline prizes remain claimable");
             first[0] = join(helper, firstProfile);
             first[0].setPos(anchor.getX() - 3, anchor.getY(), anchor.getZ());
@@ -159,7 +195,7 @@ public final class GachaGameTest {
             helper.assertTrue(data.receipts.getLast().actions.stream().allMatch(a -> a.status == PlayerStore.Status.DONE), "reconnect completes offline deliveries");
             helper.assertTrue(count(first[0], Items.DIAMOND) >= 10 && count(first[0], Items.EMERALD) >= 10, "ten item and command prizes restored");
             first[0].messages.clear();
-            server.getCommands().performPrefixedCommand(first[0].createCommandSourceStack(), "gacha history");
+            server.getCommands().performPrefixedCommand(first[0].createCommandSourceStack(), "gacha history test");
             helper.assertTrue(first[0].saw("第 1/1 页") && first[0].saw("■ 1抽"), "default history shows red squares and cycle counts");
             var details = first[0].messages.getLast().getSiblings().getLast().getStyle().getClickEvent();
             helper.assertTrue(details instanceof net.minecraft.network.chat.ClickEvent.Custom, "details toggle uses custom click");
@@ -191,15 +227,50 @@ public final class GachaGameTest {
             helper.assertTrue(first[0].saw("第 1/1 页") && first[0].saw("■ 1抽"), "toggle returns to square history");
         });
         helper.runAtTickTime(280, () -> {
-            click(second, UiActions.historyDetails(1));
+            click(second, UiActions.historyDetails("test", 1));
             helper.assertTrue(second.saw("共 0 抽") && second.saw("尚无抽奖记录"), "details click also reads only the sender's history");
         });
-        helper.runAtTickTime(282, () -> {
-            click(second, UiActions.history(1));
+        helper.runAtTickTime(282, () -> checked(() -> {
+            click(second, UiActions.history("test", 1));
             helper.assertTrue(second.saw("共 0 抽") && second.saw("尚无抽奖记录"), "history click cannot read another player's history");
-            server.getCommands().performPrefixedCommand(first[0].createCommandSourceStack(), "gacha pity");
+            server.getCommands().performPrefixedCommand(first[0].createCommandSourceStack(), "gacha pity test");
             helper.assertTrue(first[0].saw("最多再抽 80"), "normal player can see pity reset");
             helper.assertTrue(displays(helper.getLevel()).isEmpty(), "ten animation cleanup completes");
+            var nextConfig = mod.editable();
+            Pool q = JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(pool), Pool.class);
+            q.minX += 8; q.maxX += 8;
+            q.rewards.get(Tier.S).clear(); q.fixedRewards.get(Tier.S).clear();
+            Prize limited = Prize.of("diamond", "钻石", diamond); limited.limit = 1; q.rewards.get(Tier.S).add(limited);
+            q.fixedRewards.get(Tier.S).add(Prize.of("bonus", "绿宝石", Reward.command("give %player% minecraft:emerald 1")));
+            quotaPool[0] = q; nextConfig.pools.put("quota", q); mod.saveConfig(nextConfig);
+            helper.getLevel().getChunk(q.minX >> 4, q.minZ >> 4);
+            before[0] = count(first[0], Items.DIAMOND); before[1] = count(first[0], Items.EMERALD);
+        }));
+        helper.runAtTickTime(286, () -> {
+            helper.assertTrue(previews(helper.getLevel(), quotaPool[0]).size() == 1, "each idle pool gets its own model");
+            drop(first[0], quotaPool[0], Tickets.create(10, 1));
+        });
+        helper.runAtTickTime(292, () -> checked(() -> {
+            helper.assertTrue(previews(helper.getLevel(), quotaPool[0]).isEmpty(), "active pool hides its model");
+            helper.assertTrue(previews(helper.getLevel(), pool).size() == 1, "other pool model remains visible");
+            var data = mod.store.load(firstProfile.id());
+            helper.assertTrue(PlayerStore.state(data, "quota").totalDraws == 10 && PlayerStore.state(data, "test").totalDraws == 11,
+                    "same ticket type chooses destination pool and journals independent histories");
+        }));
+        helper.runAtTickTime(394, () -> checked(() -> {
+            helper.assertTrue(count(first[0], Items.DIAMOND) == before[0] + 1 && count(first[0], Items.EMERALD) == before[1] + 10,
+                    "ten draws give limited random item once and fixed bonus ten times");
+            helper.assertTrue(previews(helper.getLevel(), quotaPool[0]).isEmpty(), "result display also suppresses idle model");
+            drop(second, quotaPool[0], Tickets.create(1, 1));
+        }));
+        helper.runAtTickTime(504, () -> checked(() -> {
+            helper.assertTrue(count(second, Items.DIAMOND) == 1 && count(second, Items.EMERALD) == 1, "quota is independent for another player");
+            click(first[0], UiActions.history("quota", 1));
+            helper.assertTrue(first[0].saw("共 10 抽"), "pool click selects only that pool history");
+            helper.assertTrue(PlayerStore.state(mod.store.load(second.getUUID()), "test").totalDraws == 0, "another pool's history stays untouched");
+        }));
+        helper.runAtTickTime(518, () -> {
+            helper.assertTrue(previews(helper.getLevel(), quotaPool[0]).size() == 1, "idle model restored after both rounds");
             leave(first[0]); leave(second); checked(() -> mod.saveConfig(original)); helper.succeed();
         });
     }
@@ -259,7 +330,7 @@ public final class GachaGameTest {
         drops.getFirst().discard();
         checked(() -> {
             var mod = GachaMod.active(); var data = mod.store.load(player.getUUID());
-            var receipt = mod.store.refund(data, UUID.randomUUID(), Rewards.encode(player, new ItemStack(Items.DIAMOND)));
+            var receipt = mod.store.refund(data, UUID.randomUUID(), "test", Rewards.encode(player, new ItemStack(Items.DIAMOND)));
             player.setHealth(0); mod.deliverPending(player);
             helper.assertTrue(mod.store.load(player.getUUID()).receipts.getLast().actions.getFirst().status == PlayerStore.Status.READY,
                     "dead player retains pending reward instead of losing it on respawn");

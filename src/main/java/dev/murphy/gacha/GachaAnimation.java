@@ -68,13 +68,17 @@ final class GachaAnimation {
     }
     void tick(int elapsed, RandomGenerator random) {
         if (elapsed % 4 == 0) {
-            for (var display : displays) ((BlockDisplayAccess) display).gacha$block(COLORS[random.nextInt(COLORS.length)].defaultBlockState());
+            for (var display : displays) ((BlockDisplayAccess) display).gacha$block(COLORS[animationColor(random)].defaultBlockState());
             int note = NOTES[(elapsed / 4) % NOTES.length];
             level.playSound(null, x, y, z, SoundEvents.NOTE_BLOCK_HARP, SoundSource.BLOCKS, 0.8f,
                     (float) Math.pow(2, (note - 12) / 12.0));
             if (elapsed % 8 == 0) level.playSound(null, x, y, z, SoundEvents.NOTE_BLOCK_BELL, SoundSource.BLOCKS,
                     0.45f, (float) Math.pow(2, (note - 12) / 12.0));
         }
+    }
+    static int animationColor(RandomGenerator random) {
+        int roll = random.nextInt(100);
+        return roll < 88 ? 0 : roll < 98 ? 1 : 2;
     }
     void reveal(List<PlayerStore.Draw> draws) {
         for (int i = 0; i < displays.size(); i++) {
