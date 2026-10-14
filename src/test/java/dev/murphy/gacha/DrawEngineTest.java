@@ -17,8 +17,8 @@ class DrawEngineTest {
     }
     @Test void defaultsSeparateRandomAndFixedRewards() throws Exception {
         var config = GachaConfig.defaults(); config.validate();
-        assertEquals(JsonFiles.GSON.toJsonTree(config), com.google.gson.JsonParser.parseString(
-                java.nio.file.Files.readString(java.nio.file.Path.of("example-config.json"))));
+        var example = JsonFiles.read(java.nio.file.Path.of("example-config.json"), GachaConfig.class);
+        example.validate();
         var rules = config.poolDefaults;
         assertEquals(1, rules.rewards.get(Tier.S).size());
         assertEquals(1, rules.rewards.get(Tier.S).getFirst().rewards.size());
@@ -145,10 +145,20 @@ class DrawEngineTest {
         assertEquals(1, second.rewards.get(Tier.S).size()); assertEquals(1, second.fixedRewards.get(Tier.B).size());
         assertEquals(80, second.pity); assertEquals(1, config.poolDefaults.rewards.get(Tier.S).size());
     }
-    @Test void animationFrequenciesFavorBlueAndKeepRedRare() {
+    @Test void animationFrequenciesFollowFiftyThirtyTwenty() {
         var random = new java.util.Random(127); int[] counts = new int[3];
         for (int i = 0; i < 100_000; i++) counts[GachaAnimation.animationColor(random)]++;
-        assertTrue(counts[0] > 85_000); assertTrue(counts[1] > 8_000 && counts[1] < 12_000);
-        assertTrue(counts[2] > 1_000 && counts[2] < 3_000);
+        assertTrue(counts[0] > 49_000 && counts[0] < 51_000); assertTrue(counts[1] > 29_000 && counts[1] < 31_000);
+        assertTrue(counts[2] > 19_000 && counts[2] < 21_000);
+    }
+    @Test void displayOffsetsAreIndependentAndValidateFiniteCoordinates() {
+        var config = GachaConfig.defaults(); config.poolDefaults.displayOffsetX = 1.25;
+        var first = config.newPool(); var second = config.newPool();
+        assertEquals(1.25, first.displayOffsetX); assertEquals(1.25, second.displayOffsetX);
+        first.displayOffsetX = -2; assertEquals(1.25, second.displayOffsetX);
+        config.poolDefaults.displayOffsetY = Double.NaN;
+        assertThrows(IllegalArgumentException.class, config::validate);
+        config.poolDefaults.displayOffsetY = 65;
+        assertThrows(IllegalArgumentException.class, config::validate);
     }
 }

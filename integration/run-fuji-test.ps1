@@ -1,4 +1,5 @@
-param([switch]$Offline, [string]$GradleExecutable)
+param([switch]$Offline, [string]$GradleExecutable,
+      [ValidateSet('none', 'advice', 'cooldown', 'both')][string]$CommandHooks = 'both')
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $testRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'build/run/fujiIntegration'))
@@ -25,9 +26,17 @@ generator-settings={"layers":[{"block":"minecraft:bedrock","height":1},{"block":
 '@ | Set-Content -LiteralPath (Join-Path $testRoot 'server.properties') -Encoding utf8
 $fujiRoot = Join-Path $testRoot 'config/fuji'
 New-Item -ItemType Directory -Path (Join-Path $fujiRoot 'modules/economy') -Force | Out-Null
+$hookConfig = @{ modules = @{
+    economy = @{ enable = $true }
+    command_advice = @{ enable = ($CommandHooks -in @('advice', 'both')) }
+    command_cooldown = @{ enable = ($CommandHooks -in @('cooldown', 'both')) }
+} }
+$hookConfig | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $fujiRoot 'config.json') -Encoding utf8
+$adviceRoot = Join-Path $fujiRoot 'modules/command_advice'
+New-Item -ItemType Directory -Path $adviceRoot -Force | Out-Null
 @'
-{"modules":{"economy":{"enable":true}}}
-'@ | Set-Content -LiteralPath (Join-Path $fujiRoot 'config.json') -Encoding utf8
+{"advices":[{"enable":true,"document":"Reject the isolated test reward to verify cancellation still applies.","matcher":{"command_string_regex":"^give \\S+ minecraft:emerald 7$","accept_player_command_source":false,"accept_console_command_source":true},"advice_type":"CANCEL_AS_FAILURE","commands":[]}]}
+'@ | Set-Content -LiteralPath (Join-Path $adviceRoot 'config.json') -Encoding utf8
 @'
 {
   "provider_icon": "minecraft:paper",

@@ -29,6 +29,12 @@ public final class FujiIntegrationTest implements DedicatedServerModInitializer 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             try {
                 if (!FabricLoader.getInstance().isModLoaded("fuji")) throw new IllegalStateException("Fuji is missing");
+                String productionJar = System.getProperty("gacha.productionJar");
+                if (productionJar != null) {
+                    require(java.nio.file.Path.of(GachaMod.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toRealPath()
+                            .equals(java.nio.file.Path.of(productionJar).toRealPath()), "Gacha must load from the production JAR");
+                    GachaMod.LOGGER.info("Verified production JAR is loaded: {}", productionJar);
+                }
                 var cookie = CommonListenerCookie.createInitial(new GameProfile(UUID.randomUUID(), "Fuji" + UUID.randomUUID().toString().substring(0, 6)), false);
                 player = new ServerPlayer(server, server.overworld(), cookie.gameProfile(), cookie.clientInformation());
                 Connection connection = new Connection(PacketFlow.SERVERBOUND); new EmbeddedChannel(connection);
@@ -61,6 +67,15 @@ public final class FujiIntegrationTest implements DedicatedServerModInitializer 
                     require(PlayerStore.state(data, "fuji_test").totalDraws == 2, "Both real server draws must be recorded");
                     require(data.receipts.stream().flatMap(r -> r.actions.stream()).allMatch(a -> a.status == PlayerStore.Status.DONE),
                             "Every real Fuji action must be delivered");
+                    Rewards.deliver(player, GachaConfig.Reward.command("execute as " + player.getGameProfile().name()
+                            + " run give @s minecraft:diamond 3"));
+                    require(count(Items.DIAMOND) == 3, "Nested command executes exactly once");
+                    expectFailure("execute if entity @e[type=minecraft:marker,tag=gacha_callback_missing] run give "
+                            + player.getGameProfile().name() + " minecraft:emerald 7");
+                    var fujiConfig = JsonFiles.read(FabricLoader.getInstance().getConfigDir().resolve("fuji/config.json"), com.google.gson.JsonObject.class);
+                    boolean advice = fujiConfig.getAsJsonObject("modules").getAsJsonObject("command_advice").get("enable").getAsBoolean();
+                    if (advice) expectFailure("give " + player.getGameProfile().name() + " minecraft:emerald 7");
+                    require(count(Items.EMERALD) == 0, "Failed and cancelled commands never issue rewards");
                     finish(server, true, null);
                 }
             } catch (Exception e) { finish(server, false, e); }
@@ -72,6 +87,17 @@ public final class FujiIntegrationTest implements DedicatedServerModInitializer 
         entity.setPos(4.5, 80.5, 4.5); entity.setNoGravity(true); entity.setDeltaMovement(0, 0, 0); entity.setPickUpDelay(1000);
     }
     private static void require(boolean condition, String message) { if (!condition) throw new IllegalStateException(message); }
+    private int count(net.minecraft.world.item.Item item) {
+        int count = 0;
+        for (int i = 0; i < 36; i++) if (player.getInventory().getItem(i).is(item)) count += player.getInventory().getItem(i).getCount();
+        return count;
+    }
+    private void expectFailure(String command) {
+        boolean rejected = false;
+        try { Rewards.deliver(player, GachaConfig.Reward.command(command)); }
+        catch (IllegalStateException expected) { rejected = true; }
+        require(rejected, "Failed or cancelled reward command must not be marked successful: " + command);
+    }
     private void finish(MinecraftServer server, boolean success, Exception error) {
         if (ended) return; ended = true;
         try {

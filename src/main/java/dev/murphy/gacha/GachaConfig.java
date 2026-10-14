@@ -31,6 +31,7 @@ public final class GachaConfig {
         public double sProbability = 0.02;
         public double aProbability = 0.10;
         public int pity = 80;
+        public double displayOffsetX, displayOffsetY, displayOffsetZ;
         public Map<Tier, List<Prize>> rewards = new EnumMap<>(Tier.class);
         public Map<Tier, List<Prize>> fixedRewards = new EnumMap<>(Tier.class);
     }
@@ -39,6 +40,9 @@ public final class GachaConfig {
         public int minX, minY, minZ, maxX, maxY, maxZ;
         public String displayFacing = "+z";
         Facing facing() { return Facing.parse(displayFacing); }
+        double displayX() { return (minX + (double) maxX + 1) / 2 + displayOffsetX; }
+        double displayY(int draws) { return maxY + (draws == 10 ? 2.0 : 2.5) + displayOffsetY; }
+        double displayZ() { return (minZ + (double) maxZ + 1) / 2 + displayOffsetZ; }
         public boolean contains(double x, double y, double z) {
             return x >= minX && x < (double) maxX + 1 && y >= minY && y < (double) maxY + 1
                     && z >= minZ && z < (double) maxZ + 1;
@@ -131,6 +135,9 @@ public final class GachaConfig {
     }
 
     static void validateRules(PoolRules rules) {
+        for (double offset : new double[]{rules.displayOffsetX, rules.displayOffsetY, rules.displayOffsetZ})
+            if (!Double.isFinite(offset) || Math.abs(offset) > 64)
+                throw new IllegalArgumentException("展示偏移量必须为 -64 至 64 格内的有限数值。");
         if (!Double.isFinite(rules.sProbability) || !Double.isFinite(rules.aProbability)
                 || rules.sProbability < 0 || rules.aProbability < 0 || rules.sProbability + rules.aProbability > 1)
             throw new IllegalArgumentException("S/A 概率必须非负且总和不超过 1。");

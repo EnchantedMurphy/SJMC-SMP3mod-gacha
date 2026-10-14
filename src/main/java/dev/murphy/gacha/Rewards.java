@@ -77,9 +77,9 @@ final class Rewards {
     static void deliver(ServerPlayer player, GachaConfig.Reward reward) {
         validate(player, reward);
         if (reward.item != null) { give(player, decode(player, reward.item)); return; }
-        boolean[] succeeded = {false};
-        var source = source(player).withCallback((ok, value) -> { if (ok) succeeded[0] = true; });
+        var outcome = new RewardCommandResult();
+        var source = source(player).withCallback(outcome);
         player.level().getServer().getCommands().performPrefixedCommand(source, expand(reward.command, player));
-        if (!succeeded[0]) throw new IllegalStateException("奖品指令未报告成功，需管理员核查。");
+        if (!outcome.succeeded()) throw new IllegalStateException("奖品指令未报告成功，需管理员核查。");
     }
 }

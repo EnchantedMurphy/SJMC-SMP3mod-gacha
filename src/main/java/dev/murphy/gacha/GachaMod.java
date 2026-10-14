@@ -68,7 +68,7 @@ public final class GachaMod implements DedicatedServerModInitializer {
             active = this;
             try {
                 loadConfiguration();
-                store = new PlayerStore(directory().resolve("players-v2"));
+                store = new PlayerStore(directory().resolve("players"));
                 LOGGER.info("抽奖模组已加载，数据目录：{}", directory());
             } catch (Exception e) {
                 store = null; config = null;
@@ -137,7 +137,7 @@ public final class GachaMod implements DedicatedServerModInitializer {
     void reload() throws IOException {
         if (delivering) throw new IllegalArgumentException("发奖时不可重载配置。");
         loadConfiguration();
-        if (store == null) store = new PlayerStore(directory().resolve("players-v2"));
+        if (store == null) store = new PlayerStore(directory().resolve("players"));
     }
     GachaConfig editable() {
         available();
@@ -218,8 +218,8 @@ public final class GachaMod implements DedicatedServerModInitializer {
             String name = entry.getKey(); Pool pool = entry.getValue();
             ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, Identifier.parse(pool.dimension)));
             boolean loaded = level != null && level.getChunkSource().getChunkNow(
-                    net.minecraft.util.Mth.floor((pool.minX + (double) pool.maxX + 1) / 2) >> 4,
-                    net.minecraft.util.Mth.floor((pool.minZ + (double) pool.maxZ + 1) / 2) >> 4) != null;
+                    net.minecraft.util.Mth.floor(pool.displayX()) >> 4,
+                    net.minecraft.util.Mth.floor(pool.displayZ()) >> 4) != null;
             if (!loaded || busyPool(name) || finished.stream().anyMatch(f -> f.pool.equals(name))) { hidePreview(name); continue; }
             if (invalidPreviews.contains(name)) continue;
             try {

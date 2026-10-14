@@ -5,6 +5,8 @@ import dev.murphy.gacha.mixin.BlockDisplayAccess;
 import io.netty.channel.embedded.EmbeddedChannel;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.execution.ExecutionContext;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
@@ -72,11 +74,61 @@ public final class GachaGameTest {
     }
     private static List<Display.ItemDisplay> previews(ServerLevel level, Pool pool) {
         List<Display.ItemDisplay> list = new ArrayList<>();
-        double x = (pool.minX + (double) pool.maxX + 1) / 2, z = (pool.minZ + (double) pool.maxZ + 1) / 2;
+        double x = pool.displayX(), z = pool.displayZ();
         for (var entity : level.getAllEntities()) if (entity instanceof Display.ItemDisplay display
                 && display.entityTags().contains(GachaAnimation.FX_TAG) && !display.isRemoved()
                 && Math.abs(display.getX() - x) < .01 && Math.abs(display.getZ() - z) < .01) list.add(display);
         return list;
+    }
+    @GameTest(maxTicks = 20)
+    public void replacedCallbackPreservesBothOutcomeAndReplacementEvents(GameTestHelper helper) {
+        var player = join(helper, profile("Callback"));
+        try {
+            var outcome = new RewardCommandResult();
+            var original = Rewards.source(player).withCallback(outcome);
+            String command = "give " + player.getGameProfile().name() + " minecraft:diamond 3";
+            var parsed = helper.getLevel().getServer().getCommands().getDispatcher().parse(command, original);
+            var chain = com.mojang.brigadier.context.ContextChain.tryFlatten(parsed.getContext().build(command)).orElseThrow();
+            int[] replacementEvents = {0};
+            var replaced = original.withCallback((ok, value) -> { if (ok) replacementEvents[0]++; });
+            Commands.executeCommandInContext(replaced, context -> ExecutionContext.queueInitialCommandExecution(
+                    context, command, chain, replaced, net.minecraft.commands.CommandResultCallback.EMPTY));
+            helper.assertTrue(outcome.succeeded() && replacementEvents[0] == 1 && count(player, Items.DIAMOND) == 3,
+                    "restore reward confirmation, keep replacement event and execute command exactly once");
+            Rewards.deliver(player, Reward.command("execute as " + player.getGameProfile().name() + " run give @s minecraft:diamond 2"));
+            helper.assertTrue(count(player, Items.DIAMOND) == 5, "nested command keeps normal vanilla execution semantics");
+            boolean failed = false;
+            try { Rewards.deliver(player, Reward.command("execute if entity @e[type=minecraft:marker,tag=gacha_no_callback_target] run give "
+                    + player.getGameProfile().name() + " minecraft:emerald 1")); }
+            catch (IllegalStateException expected) { failed = true; }
+            helper.assertTrue(failed && count(player, Items.EMERALD) == 0, "real failures stay failures");
+        } finally { leave(player); }
+        helper.succeed();
+    }
+    @GameTest(maxTicks = 20)
+    public void displayOffsetsMoveModelsAndSingleDrawWhileTenKeepsItsDefaultHeight(GameTestHelper helper) {
+        Pool pool = GachaConfig.defaults().newPool(); BlockPos anchor = helper.absolutePos(new BlockPos(1, 3, 1));
+        pool.minX = pool.maxX = anchor.getX(); pool.minY = pool.maxY = anchor.getY(); pool.minZ = pool.maxZ = anchor.getZ();
+        var single = new GachaAnimation(helper.getLevel(), pool, 1);
+        try {
+            helper.assertTrue(single.displays.getFirst().getY() == anchor.getY() + 2.5, "single default height is 2.5 blocks");
+        } finally { single.clear(); }
+        pool.displayOffsetX = 1.25; pool.displayOffsetY = -0.75; pool.displayOffsetZ = -2.25;
+        var preview = new GachaPreview(helper.getLevel(), pool);
+        var shiftedSingle = new GachaAnimation(helper.getLevel(), pool, 1);
+        var ten = new GachaAnimation(helper.getLevel(), pool, 10);
+        try {
+            var item = previews(helper.getLevel(), pool).getFirst();
+            var block = shiftedSingle.displays.getFirst();
+            double x = anchor.getX() + .5 + 1.25, y = anchor.getY() + 2.5 - .75, z = anchor.getZ() + .5 - 2.25;
+            helper.assertTrue(item.getX() == x && item.getY() == y && item.getZ() == z
+                    && block.getX() == x && block.getY() == y && block.getZ() == z,
+                    "single and preview share independent world-axis offsets");
+            helper.assertTrue(Math.abs(ten.displays.get(5).getY() - (anchor.getY() + 2 - .75)) < .001
+                    && Math.abs(ten.displays.get(0).getY() - (anchor.getY() + 2.9 - .75)) < .001,
+                    "ten retains both original row heights before adding offsets");
+        } finally { preview.clear(); shiftedSingle.clear(); ten.clear(); }
+        helper.succeed();
     }
     @GameTest(maxTicks = 20)
     public void previewRotatesCyclesItemsAndCleansUp(GameTestHelper helper) {
@@ -86,7 +138,7 @@ public final class GachaGameTest {
         var preview = new GachaPreview(helper.getLevel(), pool);
         try {
             var display = previews(helper.getLevel(), pool).getFirst();
-            helper.assertTrue(display.getY() == anchor.getY() + 2 && display.getItemStack().is(Items.DIAMOND), "preview positioned two blocks above pool");
+            helper.assertTrue(display.getY() == anchor.getY() + 2.5 && display.getItemStack().is(Items.DIAMOND), "preview positioned 2.5 blocks above pool");
             var originalMetadata = display.getEntityData().getNonDefaultValues();
             for (int i = 0; i < 20; i++) preview.tick();
             helper.assertTrue(!originalMetadata.equals(display.getEntityData().getNonDefaultValues()), "rotation updates vanilla metadata");
@@ -184,7 +236,7 @@ public final class GachaGameTest {
             leave(first[0]);
         });
         helper.runAtTickTime(240, () -> checked(() -> {
-            var data = new PlayerStore(GachaMod.directory().resolve("players-v2")).load(firstProfile.id());
+            var data = new PlayerStore(GachaMod.directory().resolve("players")).load(firstProfile.id());
             helper.assertTrue(PlayerStore.state(data, "test").totalDraws == 11, "all outcomes persist before offline reveal");
             helper.assertTrue(data.receipts.getLast().actions.stream().allMatch(a -> a.status == PlayerStore.Status.READY), "offline prizes remain claimable");
             first[0] = join(helper, firstProfile);

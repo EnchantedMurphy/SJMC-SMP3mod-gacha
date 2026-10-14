@@ -28,8 +28,7 @@ final class GachaPreview {
         }
         if (items.isEmpty()) return;
         display = new Display.ItemDisplay(EntityTypes.ITEM_DISPLAY, level);
-        display.setPos((pool.minX + (double) pool.maxX + 1) / 2, pool.maxY + 2.0,
-                (pool.minZ + (double) pool.maxZ + 1) / 2);
+        display.setPos(pool.displayX(), pool.displayY(1), pool.displayZ());
         display.addTag(GachaAnimation.FX_TAG);
         display.setItemStack(items.getFirst().copy());
         display.setItemTransform(ItemDisplayContext.FIXED);

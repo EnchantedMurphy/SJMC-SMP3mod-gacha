@@ -122,7 +122,7 @@ final class GachaCommands {
         pool.minY = Math.min(a.getY(), b.getY()); pool.maxY = Math.max(a.getY(), b.getY());
         pool.minZ = Math.min(a.getZ(), b.getZ()); pool.maxZ = Math.max(a.getZ(), b.getZ());
         config.pools.put(name, pool); mod.saveConfig(config);
-        tell(c.getSource(), "抽奖池 " + name + " 已保存，区域含两个端点方块。展示位于区域顶部上方 2 格。"); return 1;
+        tell(c.getSource(), "抽奖池 " + name + " 已保存，区域含两个端点方块。轮播与单抽默认位于区域顶部上方 2.5 格，十连保持原位置。"); return 1;
     }
     private com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> facingDirections() {
         var name = Commands.argument("name", StringArgumentType.word());

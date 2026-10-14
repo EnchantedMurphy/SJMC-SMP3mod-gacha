@@ -46,9 +46,9 @@ final class GachaAnimation {
 
     GachaAnimation(ServerLevel level, Pool pool, int draws) {
         this.level = level;
-        this.x = (pool.minX + (double) pool.maxX + 1) / 2;
-        this.z = (pool.minZ + (double) pool.maxZ + 1) / 2;
-        this.y = pool.maxY + 2.0;
+        this.x = pool.displayX();
+        this.z = pool.displayZ();
+        this.y = pool.displayY(draws);
         this.facing = pool.facing();
         try {
             for (int i = 0; i < draws; i++) {
@@ -78,7 +78,7 @@ final class GachaAnimation {
     }
     static int animationColor(RandomGenerator random) {
         int roll = random.nextInt(100);
-        return roll < 88 ? 0 : roll < 98 ? 1 : 2;
+        return roll < 50 ? 0 : roll < 80 ? 1 : 2;
     }
     void reveal(List<PlayerStore.Draw> draws) {
         for (int i = 0; i < displays.size(); i++) {
