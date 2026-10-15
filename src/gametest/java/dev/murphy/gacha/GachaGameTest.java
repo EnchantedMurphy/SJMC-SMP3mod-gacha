@@ -11,6 +11,12 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -30,6 +36,7 @@ import static dev.murphy.gacha.GachaConfig.*;
 public final class GachaGameTest {
     private static final class RecordingPlayer extends ServerPlayer {
         final List<Component> messages = new ArrayList<>();
+        final List<Packet<?>> recordedPackets = new ArrayList<>();
         RecordingPlayer(MinecraftServer server, ServerLevel level, CommonListenerCookie cookie) {
             super(server, level, cookie.gameProfile(), cookie.clientInformation());
         }
@@ -37,11 +44,28 @@ public final class GachaGameTest {
         @Override public void sendSystemMessage(Component message) { messages.add(message); }
         @Override public void sendSystemMessage(Component message, boolean overlay) { messages.add(message); }
         boolean saw(String text) { return messages.stream().anyMatch(m -> m.getString().contains(text)); }
+        <P extends Packet<?>> List<P> packets(Class<P> type) {
+            return recordedPackets.stream().filter(type::isInstance).map(type::cast).toList();
+        }
+        long challengeSounds() {
+            return packets(ClientboundSoundPacket.class).stream()
+                    .filter(p -> p.getSound().value().equals(SoundEvents.UI_TOAST_CHALLENGE_COMPLETE)).count();
+        }
+        long announcements(String pool) {
+            return messages.stream().filter(m -> m.getString().startsWith("[抽奖] ")
+                    && m.getString().contains(" 在奖池 " + pool + " 抽中 ")).count();
+        }
     }
     private static RecordingPlayer join(GameTestHelper helper, GameProfile profile) {
         var cookie = CommonListenerCookie.createInitial(profile, false);
         var player = new RecordingPlayer(helper.getLevel().getServer(), helper.getLevel(), cookie);
-        Connection connection = new Connection(PacketFlow.SERVERBOUND); new EmbeddedChannel(connection);
+        Connection connection = new Connection(PacketFlow.SERVERBOUND) {
+            @Override public void send(Packet<?> packet, io.netty.channel.ChannelFutureListener listener, boolean flush) {
+                player.recordedPackets.add(packet);
+                super.send(packet, listener, flush);
+            }
+        };
+        new EmbeddedChannel(connection);
         helper.getLevel().getServer().getPlayerList().placeNewPlayer(connection, player, cookie);
         return player;
     }
@@ -205,6 +229,12 @@ public final class GachaGameTest {
             helper.assertTrue(count(first[0], Items.DIAMOND) == 0, "prizes wait for reveal");
             helper.assertTrue(displays(helper.getLevel()).size() == 1, "single draw displays one miniature vanilla entity");
             helper.assertTrue(previews(helper.getLevel(), pool).isEmpty(), "idle model hidden during animation");
+            helper.assertTrue(first[0].packets(ClientboundSetActionBarTextPacket.class).stream()
+                    .anyMatch(p -> p.text().getString().contains("开始抽奖")), "start message goes to actionbar packet");
+            helper.assertTrue(!first[0].saw("开始抽奖") && second.packets(ClientboundSetActionBarTextPacket.class).isEmpty(),
+                    "start does not appear in chat or on another player's actionbar");
+            helper.assertTrue(first[0].packets(ClientboundSetTitleTextPacket.class).isEmpty()
+                    && second.announcements("test") == 0, "S result is not exposed before reveal");
             extra[0] = drop(first[0], pool, Tickets.create(10, 1));
             extra[1] = drop(second, pool, Tickets.create(1, 2));
         }));
@@ -225,6 +255,13 @@ public final class GachaGameTest {
             helper.assertTrue(first[0].getHealth() == health, "cosmetic fireworks never damage player");
             var data = mod.store.load(firstProfile.id());
             helper.assertTrue(data.receipts.stream().flatMap(r -> r.actions.stream()).allMatch(a -> a.status == PlayerStore.Status.DONE), "all rewards and returned tickets journaled done");
+            var titles = first[0].packets(ClientboundSetTitleTextPacket.class);
+            helper.assertTrue(titles.size() == 1 && titles.getFirst().text().getString().contains("S 级")
+                    && titles.getFirst().text().getStyle().isBold(), "S winner gets an emphasized title");
+            helper.assertTrue(first[0].challengeSounds() == 1 && second.challengeSounds() == 0
+                    && second.packets(ClientboundSetTitleTextPacket.class).isEmpty(), "title and special sound only target the winner");
+            helper.assertTrue(first[0].announcements("test") == 1 && second.announcements("test") == 1
+                    && second.saw(firstProfile.name()) && second.saw("[S] 钻石+绿宝石"), "S result reaches all online players with name, pool and reward");
         }));
         helper.runAtTickTime(128, () -> {
             helper.assertTrue(displays(helper.getLevel()).isEmpty(), "old result entities cleaned up");
@@ -233,12 +270,16 @@ public final class GachaGameTest {
         });
         helper.runAtTickTime(136, () -> {
             helper.assertTrue(displays(helper.getLevel()).size() == 10, "ten draws use two rows of five entities");
+            helper.assertTrue(first[0].packets(ClientboundSetActionBarTextPacket.class).stream()
+                    .anyMatch(p -> p.text().getString().contains("开始十连抽奖")), "ten draw start also uses actionbar");
             leave(first[0]);
         });
         helper.runAtTickTime(240, () -> checked(() -> {
             var data = new PlayerStore(GachaMod.directory().resolve("players")).load(firstProfile.id());
             helper.assertTrue(PlayerStore.state(data, "test").totalDraws == 11, "all outcomes persist before offline reveal");
             helper.assertTrue(data.receipts.getLast().actions.stream().allMatch(a -> a.status == PlayerStore.Status.READY), "offline prizes remain claimable");
+            helper.assertTrue(second.announcements("test") == 2 && second.saw("[S] 钻石+绿宝石 ×10"),
+                    "offline winner's ten S results share one broadcast at reveal");
             first[0] = join(helper, firstProfile);
             first[0].setPos(anchor.getX() - 3, anchor.getY(), anchor.getZ());
         }));
@@ -246,6 +287,9 @@ public final class GachaGameTest {
             var data = mod.store.load(firstProfile.id());
             helper.assertTrue(data.receipts.getLast().actions.stream().allMatch(a -> a.status == PlayerStore.Status.DONE), "reconnect completes offline deliveries");
             helper.assertTrue(count(first[0], Items.DIAMOND) >= 10 && count(first[0], Items.EMERALD) >= 10, "ten item and command prizes restored");
+            helper.assertTrue(first[0].packets(ClientboundSetTitleTextPacket.class).isEmpty()
+                    && first[0].challengeSounds() == 0 && second.announcements("test") == 2,
+                    "reconnect and delivery do not repeat reveal notifications");
             first[0].messages.clear();
             server.getCommands().performPrefixedCommand(first[0].createCommandSourceStack(), "gacha history test");
             helper.assertTrue(first[0].saw("第 1/1 页") && first[0].saw("■ 1抽"), "default history shows red squares and cycle counts");
@@ -313,6 +357,11 @@ public final class GachaGameTest {
             helper.assertTrue(count(first[0], Items.DIAMOND) == before[0] + 1 && count(first[0], Items.EMERALD) == before[1] + 10,
                     "ten draws give limited random item once and fixed bonus ten times");
             helper.assertTrue(previews(helper.getLevel(), quotaPool[0]).isEmpty(), "result display also suppresses idle model");
+            helper.assertTrue(first[0].packets(ClientboundSetTitleTextPacket.class).size() == 1 && first[0].challengeSounds() == 1
+                    && first[0].packets(ClientboundSetSubtitleTextPacket.class).getLast().text().getString().contains("10 个 S 级"),
+                    "multiple online S wins share one title and sound");
+            helper.assertTrue(second.announcements("quota") == 1 && second.saw("[S] 绿宝石 ×9"),
+                    "exhausted random rewards still announce the actual fixed bonus, grouped by label");
             drop(second, quotaPool[0], Tickets.create(1, 1));
         }));
         helper.runAtTickTime(504, () -> checked(() -> {
@@ -321,10 +370,25 @@ public final class GachaGameTest {
             helper.assertTrue(first[0].saw("共 10 抽"), "pool click selects only that pool history");
             helper.assertTrue(PlayerStore.state(mod.store.load(second.getUUID()), "test").totalDraws == 0, "another pool's history stays untouched");
         }));
-        helper.runAtTickTime(518, () -> {
+        helper.runAtTickTime(518, () -> checked(() -> {
             helper.assertTrue(previews(helper.getLevel(), quotaPool[0]).size() == 1, "idle model restored after both rounds");
-            leave(first[0]); leave(second); checked(() -> mod.saveConfig(original)); helper.succeed();
-        });
+            first[0].recordedPackets.clear(); first[0].messages.clear();
+            second.recordedPackets.clear(); second.messages.clear();
+            var next = mod.editable(); next.animationTicks = 20;
+            next.pools.get("quota").sProbability = 0; next.pools.get("quota").aProbability = 1;
+            mod.saveConfig(next); drop(second, quotaPool[0], Tickets.create(1, 1));
+        }));
+        helper.runAtTickTime(548, () -> checked(() -> {
+            helper.assertTrue(second.packets(ClientboundSetTitleTextPacket.class).isEmpty()
+                    && second.challengeSounds() == 0 && first[0].announcements("quota") == 0, "A results do not produce S notifications");
+            var next = mod.editable(); next.pools.get("quota").aProbability = 0;
+            mod.saveConfig(next); drop(first[0], quotaPool[0], Tickets.create(1, 1));
+        }));
+        helper.runAtTickTime(578, () -> checked(() -> {
+            helper.assertTrue(first[0].packets(ClientboundSetTitleTextPacket.class).isEmpty()
+                    && first[0].challengeSounds() == 0 && second.announcements("quota") == 0, "B results do not produce S notifications");
+            leave(first[0]); leave(second); mod.saveConfig(original); helper.succeed();
+        }));
     }
 
     @GameTest(maxTicks = 20)

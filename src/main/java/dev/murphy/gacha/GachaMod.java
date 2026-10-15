@@ -12,11 +12,18 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.ServerboundCustomClickActionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
@@ -28,6 +35,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -51,7 +59,7 @@ public final class GachaMod implements DedicatedServerModInitializer {
     private final Map<UUID, Integer> lastUiClick = new HashMap<>();
     private static final class Session {
         UUID player;
-        String pool, receipt;
+        String pool, receipt, playerName;
         int elapsed, animationTicks, resultTicks;
         GachaAnimation animation;
         ArrayList<PlayerStore.Draw> draws;
@@ -183,6 +191,8 @@ public final class GachaMod implements DedicatedServerModInitializer {
             iterator.remove();
             ServerPlayer player = server.getPlayerList().getPlayer(session.player);
             pendingPlayers.add(session.player);
+            try { announceSResults(server, session, player); }
+            catch (RuntimeException e) { LOGGER.warn("S 级中奖提示发送失败，奖励仍会发放。", e); }
             if (player != null) {
                 player.sendSystemMessage(ChatUi.result(session.draws));
                 deliverPending(player);
@@ -200,6 +210,34 @@ public final class GachaMod implements DedicatedServerModInitializer {
                 if (player != null) deliverPending(player);
             }
         }
+    }
+
+    /** Announce once at reveal, independently of delivery retries or an offline winner. */
+    private void announceSResults(MinecraftServer server, Session session, ServerPlayer player) {
+        var wins = session.draws.stream().filter(draw -> draw.tier == Tier.S).toList();
+        if (wins.isEmpty()) return;
+        var labels = new LinkedHashMap<String, Integer>();
+        wins.forEach(draw -> labels.merge(draw.label, 1, Integer::sum));
+        var announcement = Component.literal("[抽奖] ").withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(session.playerName).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal(" 在奖池 " + session.pool + " 抽中 ").withStyle(ChatFormatting.GRAY));
+        boolean first = true;
+        for (var entry : labels.entrySet()) {
+            if (!first) announcement.append(Component.literal("；").withStyle(ChatFormatting.GRAY));
+            announcement.append(Component.literal("[S] " + entry.getKey() + (entry.getValue() > 1 ? " ×" + entry.getValue() : ""))
+                    .withStyle(ChatFormatting.RED));
+            first = false;
+        }
+        server.getPlayerList().broadcastSystemMessage(announcement, false);
+        if (player == null) return;
+        player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 60, 20));
+        player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(session.pool + " · "
+                + (wins.size() == 1 ? wins.getFirst().label : "本轮抽中 " + wins.size() + " 个 S 级"))
+                .withStyle(ChatFormatting.GOLD)));
+        player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("恭喜抽中 S 级！")
+                .withStyle(ChatFormatting.RED, ChatFormatting.BOLD)));
+        player.connection.send(new ClientboundSoundPacket(net.minecraft.core.Holder.direct(SoundEvents.UI_TOAST_CHALLENGE_COMPLETE),
+                SoundSource.PLAYERS, player.getX(), player.getY(), player.getZ(), 1f, 1f, fxRandom.nextLong()));
     }
 
     private void hidePreview(String pool) {
@@ -272,13 +310,15 @@ public final class GachaMod implements DedicatedServerModInitializer {
             entity.discard();
             hidePreview(pool);
             Session session = new Session(); session.player = uuid; session.pool = pool; session.receipt = receipt.id;
+            session.playerName = player.getGameProfile().name();
             session.animationTicks = config.animationTicks; session.resultTicks = config.resultTicks;
             session.draws = new ArrayList<>(receipt.draws); sessions.put(uuid, session);
             finished.removeIf(f -> { if (f.pool.equals(pool)) { f.animation.clear(); return true; } return false; });
             try { session.animation = new GachaAnimation(level, config.pools.get(pool), draws); }
             catch (RuntimeException e) { LOGGER.warn("展示实体无法创建，抽奖结果仍会在动画时长后发放。", e); }
             if (remainder != null) deliverAction(player, data, receipt, 0);
-            player.sendSystemMessage(Component.literal("开始" + (draws == 10 ? "十连抽奖" : "抽奖") + "，请等待结果……").withStyle(ChatFormatting.GOLD));
+            player.connection.send(new ClientboundSetActionBarTextPacket(Component.literal(
+                    "开始" + (draws == 10 ? "十连抽奖" : "抽奖") + "，请等待结果……").withStyle(ChatFormatting.GOLD)));
         } catch (Exception e) {
             retryAfter.put(entity.getUUID(), server.getTickCount() + 100);
             LOGGER.error("处理抽奖券失败，玩家 {}，投掷物 {}。未消费的投掷物保留。", uuid, entity.getUUID(), e);
