@@ -62,4 +62,20 @@ class MinecraftAdapterTest {
         for (String command : List.of("gacha", "gacha history main 1", "gacha pity main", "gacha pending main"))
             assertFalse(dispatcher.parse(command, player).getReader().canRead(), command);
     }
+
+    @Test void ticketAppearanceIsOptionalAndCannotForgeTickets() {
+        for (int draws : List.of(1, 10)) {
+            var ticket = Tickets.create(draws, 2);
+            var appearance = ticket.get(DataComponents.CUSTOM_MODEL_DATA);
+            assertNotNull(appearance);
+            assertEquals(List.of(draws == 10 ? Tickets.TEN_MODEL : Tickets.SINGLE_MODEL), appearance.strings());
+            assertEquals(appearance, ticket.copy().get(DataComponents.CUSTOM_MODEL_DATA));
+            assertEquals(new ItemStack(Items.PAPER).get(DataComponents.ITEM_MODEL), ticket.get(DataComponents.ITEM_MODEL));
+            var fake = new ItemStack(Items.PAPER);
+            fake.set(DataComponents.CUSTOM_MODEL_DATA, appearance);
+            assertEquals(0, Tickets.draws(fake));
+            ticket.remove(DataComponents.CUSTOM_MODEL_DATA);
+            assertEquals(draws, Tickets.draws(ticket));
+        }
+    }
 }

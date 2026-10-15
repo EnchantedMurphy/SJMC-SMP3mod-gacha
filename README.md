@@ -4,14 +4,14 @@
 
 Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽奖券投进指定区域，就能观看抽奖动画并获得奖励，适合活动奖池、商店抽奖和限定物品发放。
 
-- **客户端无需安装**：使用原版物品和展示效果，只在服务端安装模组。
+- **客户端无需安装模组**：使用原版物品和展示效果，可搭配服务端资源包为单抽券和十连券设置独立贴图。
 - **多个独立奖池**：抽奖券通用，各池的奖励、概率、个人历史和保底独立。
 - **单抽与十连**：支持 S／A／B 三个等级、S 保底和十连末抽 A 级及以上保障。
 - **灵活配奖**：支持物品、后台指令、固定额外奖励，以及每名玩家独立的奖品获取次数限制。
 - **可见的抽奖体验**：三色方块动画、音乐、烟花和 S 级物品旋转轮播；历史可翻页查看。
 - **奖励记录可追踪**：断线后可继续领取，异常奖励可由管理员核查处理。
 
-适用于 **Minecraft Java 26.3 · Fabric**，当前模组版本 **2.2.0**。各版本的改动与更新注意事项见 [版本更新记录](CHANGELOG.md)。
+适用于 **Minecraft Java 26.3 · Fabric**，当前模组版本 **2.3.0**。各版本的改动与更新注意事项见 [版本更新记录](CHANGELOG.md)。
 
 ## 快速上手
 
@@ -20,6 +20,8 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 从管理员或商店获得抽奖券后，**将券投掷到抽奖池区域内**，等待约 5 秒领取奖励。单抽券抽 1 次，十连券抽 10 次；所有奖池使用同样的券。
 
 整叠投入只使用 1 张，其余退回；奖池或玩家正在抽奖时，新投入的券也会退回。
+
+服务器提供资源包时，接受下载即可看到专属抽奖券贴图；未加载时显示为原版纸，使用方式相同。
 
 | 想做什么 | 操作或指令 |
 | --- | --- |
@@ -33,7 +35,7 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 
 ### OP 常用操作
 
-**先准备服务器：** 安装 Fabric 26.3、Java 25 和匹配的 Fabric API，把 `gacha-26.3-fabric-2.2.0.jar` 放入服务器 `mods` 目录后启动。
+**先准备服务器：** 安装 Fabric 26.3、Java 25 和匹配的 Fabric API，把 `gacha-26.3-fabric-2.3.0.jar` 放入服务器 `mods` 目录后启动。
 
 默认奖励中含 Fuji 货币指令，需要安装匹配的 Fuji、启用 `economy`，并配置 `fuji:coffee_stamp` 和 `fuji:tongbao`。不使用 Fuji 时，先将这些奖励改成物品或其他可执行指令，再开放抽奖。
 
@@ -79,7 +81,45 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 
 **`poolDefaults` 只用于创建新池时复制设置。** 修改已有池请改 `pools.<池名>`；修改模板不会改变已有池。完整结构可参考 [示例配置](example-config.json)，字段边界和奖励写法见下文。
 
+**可选抽奖券材质：** 项目附带 `smp3-resourcepack-3.0-alpha-1` 资源包。先替换其中两张透明占位贴图，再打包上传，在服务器 `server.properties` 中设置 `resource-pack` 与 `resource-pack-sha1`，详见下文“抽奖券资源包”。这些字段属于原版服务器配置，不写入 Gacha 配置。
+
 ## 进阶配置与完整指令
+
+### 抽奖券资源包
+
+资源包源文件位于 [resourcepacks/smp3-resourcepack-3.0-alpha-1](resourcepacks/smp3-resourcepack-3.0-alpha-1/README.md)，适配 Minecraft Java **26.3**，资源包格式 **97.1**。模组仍只需安装在服务端，玩家通过原版客户端下载资源包即可使用贴图。
+
+**先填写两张贴图：** 当前均为合法的 **32×32 全透明 PNG 占位图**，可替换为 32×32、64×64 等正方形 PNG，保留以下路径和文件名：
+
+| 类型 | 相对资源包根目录的贴图路径 |
+| --- | --- |
+| 单抽券 | `assets/gacha/textures/item/ticket_single.png` |
+| 十连券 | `assets/gacha/textures/item/ticket_ten.png` |
+
+加载尚未填写贴图的资源包后，券图案会不可见，名称、说明和投券功能不变。正式开放前请先替换贴图。
+
+**打包与配置：** 在项目根目录执行 `gradlew.bat resourcePackSha1`（完整 `build` 也会生成），得到：
+
+```text
+build/resourcepacks/smp3-resourcepack-3.0-alpha-1.zip
+build/resourcepacks/smp3-resourcepack-3.0-alpha-1.zip.sha1
+```
+
+将 ZIP 上传到玩家可直接下载的 HTTP／HTTPS 地址。编辑服务端 `server.properties`，例如：
+
+```properties
+resource-pack=https://example.com/smp3-resourcepack-3.0-alpha-1.zip
+resource-pack-sha1=<替换为生成的 .zip.sha1 文件中的 40 位校验值>
+require-resource-pack=false
+```
+
+示例域名和校验值需换成自己的实际内容，不保留尖括号。`require-resource-pack=false` 允许玩家拒绝资源包；设为 `true` 则必须接受才能游玩。ZIP 根目录应直接包含 `pack.mcmeta` 和 `assets/`，不要再套一层文件夹。资源包不放入 `mods` 或世界的 `datapacks`。
+
+重启服务器并让玩家重新连接以应用设置，`/gacha reload` 只重载 Gacha 配置。每次替换贴图后，都重新打包、上传 ZIP 并更新 SHA-1；校验值针对整个 ZIP，而非某一张图片。需要手动压缩时，也请重新计算最终 ZIP 的 SHA-1。
+
+**新旧券与商店：** 2.3.0 起新发放的券自动携带材质标识。旧券仍能抽奖，但显示原版纸；需要新外观时重新发券。商店复制券时同时保留 `minecraft:custom_data` 和 `minecraft:custom_model_data`；后者仅控制外观，单独添加它不能生成有效券。未加载此包时，新券也显示原版纸。
+
+**与已有资源包合并：** 此包使用 `assets/minecraft/items/paper.json` 按 `minecraft:custom_model_data` 的 `strings[0]` 选择模型；单抽标识为 `gacha:ticket_single`，十连为 `gacha:ticket_ten`，普通纸回退到原版模型。如果服务器已有资源包，将 `assets/gacha/` 合入原包，并合并纸模型中的选择分支与回退规则，避免覆盖其他纸类道具的模型；最终发布一个 ZIP，并使用其新的 SHA-1。
 
 ### 抽奖规则、固定奖励与限额
 
@@ -293,7 +333,7 @@ gacha give <商店的玩家名占位符> single 1
 gacha give <商店的玩家名占位符> ten 1
 ```
 
-替换为商店支持的实际占位符。商店复制券物品时必须保留 `minecraft:custom_data`，仅保存显示名称无法生成有效券。
+替换为商店支持的实际占位符。商店复制券物品时必须保留 `minecraft:custom_data`，使用专属贴图时也需保留 `minecraft:custom_model_data`；仅保存显示名称无法生成有效券。
 
 ### 开发与验证
 
@@ -302,6 +342,8 @@ gradlew.bat build
 ```
 
 构建包含 JUnit 和 Fabric 服务端游戏测试，覆盖概率与保底、限额与固定奖励、玩家和奖池隔离、持久化、历史翻页及原版点击包、回调兼容、失败指令识别、展示高度与偏移、烟花距离及四种朝向、轮播、退券、断线重连、死亡暂存和背包溢出。
+
+构建同时生成主 JAR、源码 JAR 和独立资源包 ZIP／SHA-1。资源包打包使用固定时间戳与文件顺序；另有测试校验 Minecraft 原生资源包元数据、券材质标识、普通纸回退及模型和贴图引用。
 
 真实 Fuji 集成测试使用其官方 `14.12.0` 的 26.3 JAR，放入 `integration/` 后运行：
 
@@ -315,4 +357,4 @@ gradlew.bat build
 
 ### 许可证
 
-本项目采用 GNU General Public License v3.0（仅此版本，`GPL-3.0-only`），完整条款见 [LICENSE](LICENSE)。发布 JAR 和源码 JAR 均附带许可证。
+本项目采用 GNU General Public License v3.0（仅此版本，`GPL-3.0-only`），完整条款见 [LICENSE](LICENSE)。发布 JAR、源码 JAR 和资源包 ZIP 均附带许可证。

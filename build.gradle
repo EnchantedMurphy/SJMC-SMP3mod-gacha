@@ -44,6 +44,32 @@ tasks.named('jar', Jar) {
 tasks.named('sourcesJar', Jar) {
     from('LICENSE')
 }
+
+def resourcePackName = 'smp3-resourcepack-3.0-alpha-1'
+def resourcePackZip = tasks.register('resourcePackZip', Zip) {
+    group = 'build'
+    description = 'Package the optional ticket resource pack with blank texture placeholders.'
+    from("resourcepacks/${resourcePackName}")
+    from('LICENSE')
+    archiveFileName = "${resourcePackName}.zip"
+    destinationDirectory = layout.buildDirectory.dir('resourcepacks')
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+def resourcePackSha1 = tasks.register('resourcePackSha1') {
+    group = 'build'
+    description = 'Package the resource pack and write its server.properties SHA-1 checksum.'
+    dependsOn resourcePackZip
+    def archive = resourcePackZip.flatMap { it.archiveFile }
+    def checksum = layout.buildDirectory.file("resourcepacks/${resourcePackName}.zip.sha1")
+    inputs.file(archive)
+    outputs.file(checksum)
+    doLast {
+        def hash = java.security.MessageDigest.getInstance('SHA-1').digest(archive.get().asFile.bytes)
+        checksum.get().asFile.setText(hash.encodeHex().toString() + '\n', 'UTF-8')
+    }
+}
+tasks.named('assemble') { dependsOn resourcePackSha1 }
 test { useJUnitPlatform() }
 loom {
     runs {

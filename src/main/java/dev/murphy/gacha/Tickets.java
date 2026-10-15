@@ -7,10 +7,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.CustomModelData;
 import net.minecraft.world.item.component.ItemLore;
 import java.util.List;
 
 public final class Tickets {
+    public static final String SINGLE_MODEL = "gacha:ticket_single";
+    public static final String TEN_MODEL = "gacha:ticket_ten";
     private Tickets() {}
 
     public static ItemStack create(int draws, int count) {
@@ -20,6 +23,9 @@ public final class Tickets {
         tag.putInt("gacha_draws", draws);
         tag.putInt("gacha_version", 1);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+        // Keep the vanilla paper item model so clients without the optional pack see paper.
+        stack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(
+                List.of(), List.of(), List.of(draws == 10 ? TEN_MODEL : SINGLE_MODEL), List.of()));
         stack.set(DataComponents.CUSTOM_NAME, Component.literal(draws == 10 ? "十连抽奖券" : "抽奖券")
                 .withStyle(style -> style.withColor(ChatFormatting.GOLD).withItalic(false)));
         stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
