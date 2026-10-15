@@ -40,7 +40,7 @@ final class Rewards {
         String command = expand(reward.command, player);
         var parsed = player.level().getServer().getCommands().getDispatcher().parse(command, source(player));
         if (parsed.getReader().canRead() || ContextChain.tryFlatten(parsed.getContext().build(command)).isEmpty())
-            throw new IllegalArgumentException("奖品指令无法执行，请检查 Fuji 模块/货币及配置：" + reward.command);
+            throw new IllegalArgumentException("奖品指令无法解析，请检查指令名称、必填参数和后台执行权限：" + reward.command);
     }
     static void validateAll(ServerPlayer player, GachaConfig.PoolRules config) {
         config.rewards.get(GachaConfig.Tier.S).forEach(prize -> {
