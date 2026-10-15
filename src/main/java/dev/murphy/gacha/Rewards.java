@@ -43,6 +43,9 @@ final class Rewards {
             throw new IllegalArgumentException("奖品指令无法执行，请检查 Fuji 模块/货币及配置：" + reward.command);
     }
     static void validateAll(ServerPlayer player, GachaConfig.PoolRules config) {
+        config.rewards.get(GachaConfig.Tier.S).forEach(prize -> {
+            if (prize.displayItem != null) decode(player, prize.displayItem);
+        });
         config.rewards.values().forEach(list -> list.forEach(prize -> prize.rewards.forEach(r -> validate(player, r))));
         config.fixedRewards.values().forEach(list -> list.forEach(prize -> prize.rewards.forEach(r -> validate(player, r))));
     }

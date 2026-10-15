@@ -181,6 +181,8 @@ final class ChatUi {
                 command(lines, "reward sethand <池名> <等级> <ID> [权重] [限额]", "保存主手整叠物品，不消耗物品");
                 command(lines, "reward remove <池名> <等级> <ID>", "删除随机奖品，可清空");
                 command(lines, "reward limit <池名> <等级> <ID> <次数>", "个人限额，-1 无限、0 禁用");
+                command(lines, "reward setdisplay <池名> S <ID>", "主手设为独立轮播物品，仅展示不发奖");
+                command(lines, "reward cleardisplay <池名> S <ID>", "清除独立展示，恢复实际物品轮播");
                 command(lines, "bonus sethand <池名> <等级> <ID>", "添加固定额外物品");
                 command(lines, "bonus list <池名>", "查看固定额外奖励");
                 command(lines, "bonus remove <池名> <等级> <ID>", "删除固定额外奖励");

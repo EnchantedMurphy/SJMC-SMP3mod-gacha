@@ -60,7 +60,8 @@ public final class GachaMod implements DedicatedServerModInitializer {
     private static final class Session {
         UUID player;
         String pool, receipt, playerName;
-        int elapsed, animationTicks, resultTicks;
+        int elapsed, animationTicks, resultTicks, actionbarTicks;
+        boolean actionbarVisible;
         GachaAnimation animation;
         ArrayList<PlayerStore.Draw> draws;
     }
@@ -177,6 +178,9 @@ public final class GachaMod implements DedicatedServerModInitializer {
         while (iterator.hasNext()) {
             Session session = iterator.next();
             session.elapsed++;
+            ServerPlayer player = server.getPlayerList().getPlayer(session.player);
+            try { updateActionbar(player, session); }
+            catch (RuntimeException e) { LOGGER.warn("抽奖 actionbar 提示发送失败，抽奖继续进行。", e); }
             if (session.elapsed < session.animationTicks) {
                 if (session.animation != null) try { session.animation.tick(session.elapsed, fxRandom); }
                 catch (RuntimeException e) { LOGGER.warn("抽奖动画异常，奖励仍会按时发放。", e); session.animation.clear(); session.animation = null; }
@@ -189,7 +193,6 @@ public final class GachaMod implements DedicatedServerModInitializer {
                 f.lifetime = Math.max(3, session.resultTicks); finished.add(f);
             }
             iterator.remove();
-            ServerPlayer player = server.getPlayerList().getPlayer(session.player);
             pendingPlayers.add(session.player);
             try { announceSResults(server, session, player); }
             catch (RuntimeException e) { LOGGER.warn("S 级中奖提示发送失败，奖励仍会发放。", e); }
@@ -209,6 +212,21 @@ public final class GachaMod implements DedicatedServerModInitializer {
                 ServerPlayer player = server.getPlayerList().getPlayer(uuid);
                 if (player != null) deliverPending(player);
             }
+        }
+    }
+
+    private void updateActionbar(ServerPlayer player, Session session) {
+        if (player == null) return;
+        if (session.elapsed < Math.min(session.actionbarTicks, session.animationTicks)) {
+            // Refresh before vanilla fades the text; use the session snapshot across config reloads.
+            if (session.elapsed % 20 == 0) {
+                player.connection.send(new ClientboundSetActionBarTextPacket(Component.literal(
+                        "开始" + (session.draws.size() == 10 ? "十连抽奖" : "抽奖") + "，请等待结果……").withStyle(ChatFormatting.GOLD)));
+                session.actionbarVisible = true;
+            }
+        } else if (session.actionbarVisible) {
+            player.connection.send(new ClientboundSetActionBarTextPacket(Component.empty()));
+            session.actionbarVisible = false;
         }
     }
 
@@ -312,13 +330,13 @@ public final class GachaMod implements DedicatedServerModInitializer {
             Session session = new Session(); session.player = uuid; session.pool = pool; session.receipt = receipt.id;
             session.playerName = player.getGameProfile().name();
             session.animationTicks = config.animationTicks; session.resultTicks = config.resultTicks;
+            session.actionbarTicks = config.actionbarTicks;
             session.draws = new ArrayList<>(receipt.draws); sessions.put(uuid, session);
             finished.removeIf(f -> { if (f.pool.equals(pool)) { f.animation.clear(); return true; } return false; });
             try { session.animation = new GachaAnimation(level, config.pools.get(pool), draws); }
             catch (RuntimeException e) { LOGGER.warn("展示实体无法创建，抽奖结果仍会在动画时长后发放。", e); }
             if (remainder != null) deliverAction(player, data, receipt, 0);
-            player.connection.send(new ClientboundSetActionBarTextPacket(Component.literal(
-                    "开始" + (draws == 10 ? "十连抽奖" : "抽奖") + "，请等待结果……").withStyle(ChatFormatting.GOLD)));
+            updateActionbar(player, session);
         } catch (Exception e) {
             retryAfter.put(entity.getUUID(), server.getTickCount() + 100);
             LOGGER.error("处理抽奖券失败，玩家 {}，投掷物 {}。未消费的投掷物保留。", uuid, entity.getUUID(), e);

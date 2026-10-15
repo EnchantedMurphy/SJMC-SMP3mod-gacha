@@ -47,6 +47,7 @@ class MinecraftAdapterTest {
                 "gacha history main details", "gacha history main details 2", "gacha pool facing main +x", "gacha pool facing main -x",
                 "gacha pool facing main +z", "gacha pool facing main -z",
                 "gacha pool list", "gacha reward list main", "gacha reward sethand main S mace", "gacha reward sethand main A diamond 3",
+                "gacha reward setdisplay main S money", "gacha reward cleardisplay main S money",
                 "gacha reward setcommand main B money \"铁镐通宝 ×20\" economy give %player% fuji:tongbao 20",
                 "gacha reward remove main S mace", "gacha reward limit main S mace 1", "gacha reward sethand main S mace 1 2", "gacha bonus sethand main S stamp", "gacha bonus remove main S stamp", "gacha bonus list main", "gacha bonus setcommand main S stamp \"money\" give %player% minecraft:paper 1", "gacha check main Steve", "gacha reload",
                 "gacha recover main Steve abc 1 retry", "gacha recover main Steve abc 2 done")) {
@@ -56,7 +57,7 @@ class MinecraftAdapterTest {
         var player = Commands.createCompilationContext(PermissionSet.NO_PERMISSIONS);
         assertTrue(dispatcher.parse("lottery history", player).getReader().canRead());
         for (String command : List.of("gacha give Steve single", "gacha pool facing main +x", "gacha reward list main", "gacha reload", "gacha check main Steve",
-                "gacha pending main Steve", "gacha recover main Steve abc 1 retry")) {
+                "gacha pending main Steve", "gacha recover main Steve abc 1 retry", "gacha reward setdisplay main S money", "gacha reward cleardisplay main S money")) {
             assertTrue(dispatcher.parse(command, player).getReader().canRead(), command);
         }
         for (String command : List.of("gacha", "gacha history main 1", "gacha pity main", "gacha pending main"))

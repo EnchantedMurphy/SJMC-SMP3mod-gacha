@@ -11,7 +11,7 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 - **可见的抽奖体验**：三色方块动画、音乐、烟花和 S 级物品旋转轮播；出 S 时个人大字幕与音效强调、全服播报，历史可翻页查看。
 - **奖励记录可追踪**：断线后可继续领取，异常奖励可由管理员核查处理。
 
-适用于 **Minecraft Java 26.3 · Fabric**，当前模组版本 **2.3.1**。各版本的改动与更新注意事项见 [版本更新记录](CHANGELOG.md)。
+适用于 **Minecraft Java 26.3 · Fabric**，当前模组版本 **2.3.2**。各版本的改动与更新注意事项见 [版本更新记录](CHANGELOG.md)。
 
 ## 快速上手
 
@@ -19,7 +19,7 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 
 从管理员或商店获得抽奖券后，**将券投掷到抽奖池区域内**，等待约 5 秒领取奖励。单抽券抽 1 次，十连券抽 10 次；所有奖池使用同样的券。
 
-开始抽奖提示显示在快捷栏上方的 actionbar。抽到 S 级时，中奖玩家会看到红色大字幕并听到专属音效，全服聊天栏同时播报中奖玩家、奖池和 S 级奖品。
+开始抽奖提示显示在快捷栏上方的 actionbar，默认持续到约 5 秒后的结果揭晓。抽到 S 级时，中奖玩家会看到红色大字幕并听到专属音效，全服聊天栏同时播报中奖玩家、奖池和 S 级奖品。
 
 整叠投入只使用 1 张，其余退回；奖池或玩家正在抽奖时，新投入的券也会退回。
 
@@ -37,7 +37,7 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 
 ### OP 常用操作
 
-**先准备服务器：** 安装 Fabric 26.3、Java 25 和匹配的 Fabric API，把 `gacha-26.3-fabric-2.3.1.jar` 放入服务器 `mods` 目录后启动。
+**先准备服务器：** 安装 Fabric 26.3、Java 25 和匹配的 Fabric API，把 `gacha-26.3-fabric-2.3.2.jar` 放入服务器 `mods` 目录后启动。
 
 默认奖励中含 Fuji 货币指令，需要安装匹配的 Fuji、启用 `economy`，并配置 `fuji:coffee_stamp` 和 `fuji:tongbao`。不使用 Fuji 时，先将这些奖励改成物品或其他可执行指令，再开放抽奖。
 
@@ -59,6 +59,8 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 | 添加或替换随机物品 | 主手拿好奖品，执行 `/gacha reward sethand main S mace 1 -1`；权重为 1，每人不限次数 |
 | 设置每人仅可获得一次 | `/gacha reward limit main S mace 1` |
 | 添加固定额外物品 | 主手拿好物品，执行 `/gacha bonus sethand main A extra` |
+| 为 S 级指令奖品设置旋转展示 | 先创建奖品，再主手拿好模型物品执行 `/gacha reward setdisplay main S money`，`money` 为奖品 ID |
+| 清除独立展示物品 | `/gacha reward cleardisplay main S money` |
 | 查看奖品 | `/gacha reward list main`；固定额外奖励用 `/gacha bonus list main` |
 | 调整展示朝向 | `/gacha pool facing main +z`，也可填 `-z`、`+x`、`-x` |
 | 删除奖池 | `/gacha pool remove main` |
@@ -79,7 +81,9 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 | 随机奖品 `limit` | 每名玩家可抽中该奖品的次数 | `-1` 无限、`1` 每人一次、`0` 禁用 |
 | 池 `displayOffsetX/Y/Z` | 相对默认位置的展示偏移 | Y 填 `0.5`，整体向上移动半格 |
 | 池 `fireworkDistance` | 每侧烟花距展示中心的距离 | `5.0`：左右各距中心 5 格 |
-| 顶层 `animationTicks`、`resultTicks` | 抽奖动画与结果保留时长 | `100`、`40`：约 5 秒、2 秒 |
+| 顶层 `animationTicks`、`resultTicks` | 抽奖动画与结果保留时长 | `100`、`60`：约 5 秒、3 秒 |
+| 顶层 `actionbarTicks` | 开始抽奖提示持续时间，0 为关闭，最晚在揭晓时结束 | 默认 `100`：约 5 秒 |
+| S 随机奖品 `displayItem` | 独立旋转展示物品；支持指令奖品，仅展示不发放 | 物品 JSON，可用 `reward setdisplay` 保存 |
 
 **`poolDefaults` 只用于创建新池时复制设置。** 修改已有池请改 `pools.<池名>`；修改模板不会改变已有池。完整结构可参考 [示例配置](example-config.json)，字段边界和奖励写法见下文。
 
@@ -182,13 +186,53 @@ require-resource-pack=false
 
 Fuji 货币标识属于经济账户 ID。发实体货币道具时，用 `sethand` 保存实际道具；增加账户余额时，使用对应经济指令。
 
+### S 级指令奖品的旋转展示
+
+在 `pools.<池名>.rewards.S` 中，每个随机奖品可以单独增加 `displayItem`，与 `id`、`label`、`rewards` 同级。例如，通过指令发放咖啡印章余额，同时在池上方展示一张纸：
+
+```json
+{
+  "id": "money",
+  "label": "咖啡印章 ×20",
+  "weight": 1,
+  "limit": -1,
+  "displayItem": {"id": "minecraft:paper", "count": 1},
+  "rewards": [
+    {"command": "economy give %player% fuji:coffee_stamp 20"}
+  ]
+}
+```
+
+`displayItem` 使用原版物品 JSON 格式，支持名称、附魔和材质等完整组件。推荐主手拿好模型物品，执行 `/gacha reward setdisplay main S money` 自动保存；此指令需要 OP 2，不消耗物品。实际奖励由 `rewards` 决定，展示物品不会额外发给玩家。
+
+设置后，该奖品只轮播指定的展示物品，数量固定显示为 1；不再从这个奖品的子奖励中提取物品。未设置时，继续轮播子奖励中的实际物品；纯指令奖品没有指定展示物品则不展示。`displayItem` 仅允许用于 S 级随机奖品，固定奖励和 A／B 级不使用此字段；`limit: 0` 的奖品仍不参与轮播。
+
+执行 `/gacha reward cleardisplay main S money` 或移除该字段，可恢复自动提取实际物品。`reward list` 会标出设置了独立展示的奖品，`/gacha check main` 同时校验展示物品。手动编辑配置后使用 `/gacha reload`；用 `sethand`／`setcommand` 替换整个奖品后，需要重新设置展示物品。`poolDefaults.rewards.S` 中的设置仍只作为新池模板。
+
+### actionbar 持续时间
+
+在配置顶层设置：
+
+```json
+{
+  "animationTicks": 100,
+  "resultTicks": 60,
+  "actionbarTicks": 100
+}
+```
+
+以上为默认值，每秒约 20 tick。`actionbarTicks` 控制“开始抽奖，请等待结果……”的持续时间，范围 0–1200，0 为关闭。显示期间每 20 tick 刷新一次，避免原版提示提前淡出；达到设置时长时主动清除。如果配置时长超过本轮动画时长，则在结果揭晓时提前清除，避免中奖后继续显示“等待结果”。
+
+保存后执行 `/gacha reload`，对下一轮生效。每轮开始时保存时长快照，修改配置不会改变进行中的提示。`resultTicks` 控制混凝土结果展示与恢复空闲轮播的间隔，默认 60 tick（3 秒），与 actionbar 时长分开设置。
+
 ### 字段范围与展示位置
 
 | 字段 | 规则 |
 | --- | --- |
 | 顶层 `schemaVersion` | 当前为 `2` |
 | 顶层 `animationTicks` | 20–1200 tick，默认 100 |
-| 顶层 `resultTicks` | 0–1200 tick，默认 40；烟花会保留完成效果所需的几 tick |
+| 顶层 `resultTicks` | 0–1200 tick，默认 60；烟花会保留完成效果所需的几 tick |
+| 顶层 `actionbarTicks` | 0–1200 tick，默认 100；0 关闭，最多显示至本轮揭晓 |
 | 池 `dimension`、区域坐标 | 在目标维度设置；单边最多 65 格，同维度投券区域不可重叠 |
 | 池 `sProbability`、`aProbability` | 非负有限数值，总和不超过 1 |
 | 池 `pity` | 1–1000000 |
@@ -200,6 +244,7 @@ Fuji 货币标识属于经济账户 ID。发实体货币道具时，用 `sethand
 | 奖品 `label` | 非空显示名称，最多 256 字符 |
 | 随机奖品 `weight` | 正整数，默认 1；同等级按剩余可抽奖品的权重计算 |
 | 随机奖品 `limit` | `-1` 或非负整数，默认 `-1` |
+| S 随机奖品 `displayItem` | 可省略；非空物品 JSON，只影响空闲轮播，优先于实际子奖励物品 |
 | `rewards.S/A/B`、`fixedRewards.S/A/B` | 都需提供三个等级的数组，可为空 |
 | 单个奖品的 `rewards` | 非空子奖励数组 |
 
@@ -246,6 +291,8 @@ OP 2 或后台：
 | `/gacha reward list <池名>` | 查看随机奖励 |
 | `/gacha reward sethand <池名> <等级> <ID> [权重] [限额]` | 保存主手随机奖品；默认权重 1、限额 -1 |
 | `/gacha reward limit <池名> <等级> <ID> <次数>` | 修改个人限额，已有次数保留 |
+| `/gacha reward setdisplay <池名> S <ID>` | 将主手完整物品保存为该随机奖品的独立展示；需游戏内执行 |
+| `/gacha reward cleardisplay <池名> S <ID>` | 清除独立展示，恢复自动提取实际物品；可从后台执行 |
 | `/gacha reward remove <池名> <等级> <ID>` | 删除随机奖品 |
 | `/gacha bonus list <池名>` | 查看固定额外奖励 |
 | `/gacha bonus sethand <池名> <等级> <ID>` | 保存主手固定额外物品 |
@@ -272,7 +319,7 @@ execute in minecraft:overworld run gacha pool set main 100 64 100 103 66 103
 
 ### 动画、历史与投券细节
 
-- 空闲时轮播 S 随机奖励中的物品，缩放 0.8，每 12 秒旋转一圈，每 4 秒切换一件。固定额外物品、纯指令奖品和 `limit: 0` 的奖品不参与轮播。
+- 空闲时轮播 S 随机奖品的 `displayItem`，未设置则提取其实际子奖励物品，缩放 0.8，每 12 秒旋转一圈，每 4 秒切换一件。固定额外奖励、未指定展示的纯指令奖品和 `limit: 0` 的奖品不参与轮播。
 - 轮播面向所有玩家，不随某名玩家的限额耗尽而消失；所在展示区块未加载时不生成，也不会强制加载区块。抽奖和结果展示期间隐藏，清理后恢复。
 - 混凝土随机闪色为蓝 50%、黄 30%、红 20%；实际中奖概率使用奖池配置。揭晓时 S／A／B 分别显示红／黄／蓝，音乐和两侧烟花配合揭晓；烟花不造成伤害。
 - 开始抽奖只向投券者发送 actionbar 提示。S 级结果揭晓时，全服聊天播报玩家名、奖池和奖品；十连中的多个 S 合并为一条，相同奖励合并显示次数。在线中奖者另有红色加粗大字幕（淡入 0.5 秒、停留 3 秒、淡出 1 秒）和原版挑战完成音效，其他玩家不会收到该字幕或专属音效。
@@ -347,7 +394,7 @@ gradlew.bat build
 
 构建包含 JUnit 和 Fabric 服务端游戏测试，覆盖概率与保底、限额与固定奖励、玩家和奖池隔离、持久化、历史翻页及原版点击包、回调兼容、失败指令识别、展示高度与偏移、烟花距离及四种朝向、轮播、退券、断线重连、死亡暂存和背包溢出。
 
-服务端游戏测试还检查原版 actionbar、大字幕与音效包的接收范围、S 级全服播报、十连合并及离线重领不重复提示。
+服务端游戏测试还检查原版 actionbar 的刷新、到期清除、关闭和揭晓上限，大字幕与音效包的接收范围、S 级全服播报、十连合并及离线重领不重复提示，以及指令奖品的独立轮播、主手设置／清除和展示不参与发奖。
 
 构建同时生成主 JAR、源码 JAR 和独立资源包 ZIP／SHA-1。资源包打包使用固定时间戳与文件顺序；另有测试校验 Minecraft 原生资源包元数据、券材质标识、普通纸回退及模型和贴图引用。
 

@@ -184,6 +184,46 @@ public final class GachaGameTest {
                 .parse(com.mojang.serialization.JsonOps.INSTANCE, json).getOrThrow();
         player.connection.handleCustomClickAction(new net.minecraft.network.protocol.common.ServerboundCustomClickActionPacket(received.id(), received.payload()));
     }
+    @GameTest(maxTicks = 20)
+    public void commandRewardsHaveIndependentPreviewItemsWithoutExtraPayouts(GameTestHelper helper) {
+        var player = join(helper, profile("Preview"));
+        Pool pool = GachaConfig.defaults().newPool(); BlockPos anchor = helper.absolutePos(new BlockPos(1, 3, 1));
+        pool.minX = pool.maxX = anchor.getX(); pool.minY = pool.maxY = anchor.getY(); pool.minZ = pool.maxZ = anchor.getZ();
+        var model = new ItemStack(Items.CLOCK, 16);
+        model.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal("独立展示"));
+        var first = Prize.of("money", "指令奖励", Reward.command("give %player% minecraft:iron_ingot 1"));
+        first.displayItem = Rewards.encode(player, model).item;
+        var second = Prize.of("paper", "另一指令", Reward.command("give %player% minecraft:paper 1"));
+        second.displayItem = Rewards.encode(player, new ItemStack(Items.PAPER)).item;
+        var disabled = Prize.of("disabled", "已禁用", Reward.command("give %player% minecraft:diamond 1"));
+        disabled.limit = 0; disabled.displayItem = Rewards.encode(player, new ItemStack(Items.DIAMOND)).item;
+        var actual = pool.rewards.get(Tier.S).getFirst();
+        pool.rewards.put(Tier.S, new ArrayList<>(List.of(first, second, disabled,
+                Prize.of("hidden", "无展示", Reward.command("give %player% minecraft:emerald 1")), actual)));
+        pool.fixedRewards.values().forEach(List::clear);
+        Rewards.validateAll(player, pool);
+        var preview = new GachaPreview(helper.getLevel(), pool);
+        try {
+            var display = previews(helper.getLevel(), pool).getFirst();
+            helper.assertTrue(display.getItemStack().is(Items.CLOCK) && display.getItemStack().getCount() == 1
+                    && display.getItemStack().getHoverName().getString().equals("独立展示"), "command preview preserves components and displays one item");
+            for (int i = 0; i < 80; i++) preview.tick();
+            helper.assertTrue(display.getItemStack().is(Items.PAPER), "each command prize has its own display");
+            for (int i = 0; i < 80; i++) preview.tick();
+            helper.assertTrue(display.getItemStack().is(Items.MACE), "disabled and command-only prizes are skipped; actual items still rotate");
+            for (int i = 0; i < 80; i++) preview.tick();
+            helper.assertTrue(display.getItemStack().is(Items.CLOCK) && count(player, Items.IRON_INGOT) == 0,
+                    "preview loops without executing commands");
+            Rewards.deliver(player, first.rewards.getFirst());
+            helper.assertTrue(count(player, Items.IRON_INGOT) == 1 && count(player, Items.CLOCK) == 0,
+                    "only the command pays out, never the display item");
+        } finally { preview.clear(); }
+        first.displayItem = com.google.gson.JsonParser.parseString("{\"id\":\"minecraft:air\",\"count\":1}");
+        boolean rejected = false;
+        try { Rewards.validateAll(player, pool); } catch (IllegalArgumentException expected) { rejected = true; }
+        helper.assertTrue(rejected, "check rejects an invalid display item");
+        leave(player); helper.succeed();
+    }
     @FunctionalInterface private interface Checked { void run() throws Exception; }
     private static void checked(Checked action) {
         try { action.run(); } catch (RuntimeException e) { throw e; } catch (Exception e) { throw new IllegalStateException(e); }
@@ -194,7 +234,7 @@ public final class GachaGameTest {
         var mod = GachaMod.active(); var server = helper.getLevel().getServer();
         var original = mod.config;
         var config = GachaConfig.defaults(); config.poolDefaults.sProbability = 1; config.poolDefaults.aProbability = 0; config.pools.clear();
-        config.resultTicks = 20;
+        config.resultTicks = 20; config.actionbarTicks = 60;
         config.poolDefaults.fixedRewards.values().forEach(List::clear);
         var diamond = GachaConfig.defaults().poolDefaults.rewards.get(Tier.A).getFirst().rewards.getFirst();
         config.poolDefaults.rewards.put(Tier.S, new ArrayList<>(List.of(Prize.of("bundle", "钻石+绿宝石", diamond, Reward.command("give %player% minecraft:emerald 1")))));
@@ -207,6 +247,14 @@ public final class GachaGameTest {
         Pool pool = mod.config.pools.get("test"); helper.assertTrue(pool != null, "operator can save cuboid pool with coordinates");
         var firstProfile = profile("Lotto"); RecordingPlayer[] first = {join(helper, firstProfile)};
         RecordingPlayer second = join(helper, profile("Other"));
+        var model = new ItemStack(Items.GOLD_INGOT, 3);
+        model.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal("仅作展示"));
+        first[0].getInventory().setItem(0, model);
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withEntity(first[0]).withLevel(helper.getLevel()),
+                "gacha reward setdisplay test S bundle");
+        helper.assertTrue(mod.config.pool("test").rewards.get(Tier.S).getFirst().displayItem != null
+                && count(first[0], Items.GOLD_INGOT) == 3, "setdisplay captures the main hand without consuming it");
+        first[0].getInventory().setItem(0, ItemStack.EMPTY);
         first[0].setPos(anchor.getX() - 3, anchor.getY(), anchor.getZ()); second.setPos(anchor.getX() - 4, anchor.getY(), anchor.getZ());
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gacha give " + second.getGameProfile().name() + " ten 1");
         helper.assertTrue(tickets(second, 10) == 1, "admin gives vanilla ticket through command");
@@ -248,8 +296,18 @@ public final class GachaGameTest {
             unowned.setNoGravity(true); unowned.setPickUpDelay(1000); helper.getLevel().addFreshEntity(unowned);
             helper.runAfterDelay(4, () -> { helper.assertTrue(!unowned.isRemoved(), "unowned item is ignored"); unowned.discard(); });
         }));
+        helper.runAtTickTime(30, () -> {
+            helper.assertTrue(first[0].packets(ClientboundSetActionBarTextPacket.class).size() >= 2,
+                    "start message is refreshed during the configured duration");
+        });
+        helper.runAtTickTime(64, () -> {
+            var messages = first[0].packets(ClientboundSetActionBarTextPacket.class);
+            helper.assertTrue(messages.size() == 4 && messages.getLast().text().getString().isEmpty(),
+                    "three refreshes and an explicit clear honor the sixty-tick duration");
+        });
         helper.runAtTickTime(108, () -> checked(() -> {
             helper.assertTrue(count(first[0], Items.DIAMOND) == 1 && count(first[0], Items.EMERALD) == 1, "item and command bundle deliver at reveal");
+            helper.assertTrue(count(first[0], Items.GOLD_INGOT) == 0, "independent preview does not become an extra reward");
             var visible = displays(helper.getLevel()); helper.assertTrue(visible.size() == 1, "result remains briefly visible");
             helper.assertTrue(((BlockDisplayAccess) visible.getFirst()).gacha$state().is(Blocks.CONCRETE.red()), "S display metadata is red concrete");
             helper.assertTrue(first[0].getHealth() == health, "cosmetic fireworks never damage player");
@@ -266,6 +324,10 @@ public final class GachaGameTest {
         helper.runAtTickTime(128, () -> {
             helper.assertTrue(displays(helper.getLevel()).isEmpty(), "old result entities cleaned up");
             helper.assertTrue(previews(helper.getLevel(), pool).size() == 1, "idle model returns after result cleanup");
+            helper.assertTrue(previews(helper.getLevel(), pool).getFirst().getItemStack().is(Items.GOLD_INGOT),
+                    "saved independent model returns after draw cleanup");
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gacha reward cleardisplay test S bundle");
+            helper.assertTrue(mod.config.pool("test").rewards.get(Tier.S).getFirst().displayItem == null, "clear command removes only the display override");
             drop(first[0], pool, Tickets.create(10, 1));
         });
         helper.runAtTickTime(136, () -> {
@@ -332,7 +394,7 @@ public final class GachaGameTest {
             server.getCommands().performPrefixedCommand(first[0].createCommandSourceStack(), "gacha pity test");
             helper.assertTrue(first[0].saw("最多再抽 80"), "normal player can see pity reset");
             helper.assertTrue(displays(helper.getLevel()).isEmpty(), "ten animation cleanup completes");
-            var nextConfig = mod.editable();
+            var nextConfig = mod.editable(); nextConfig.actionbarTicks = 1200;
             Pool q = JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(pool), Pool.class);
             q.minX += 8; q.maxX += 8;
             q.rewards.get(Tier.S).clear(); q.fixedRewards.get(Tier.S).clear();
@@ -362,6 +424,8 @@ public final class GachaGameTest {
                     "multiple online S wins share one title and sound");
             helper.assertTrue(second.announcements("quota") == 1 && second.saw("[S] 绿宝石 ×9"),
                     "exhausted random rewards still announce the actual fixed bonus, grouped by label");
+            helper.assertTrue(first[0].packets(ClientboundSetActionBarTextPacket.class).getLast().text().getString().isEmpty(),
+                    "long configured actionbar ends at reveal");
             drop(second, quotaPool[0], Tickets.create(1, 1));
         }));
         helper.runAtTickTime(504, () -> checked(() -> {
@@ -374,19 +438,23 @@ public final class GachaGameTest {
             helper.assertTrue(previews(helper.getLevel(), quotaPool[0]).size() == 1, "idle model restored after both rounds");
             first[0].recordedPackets.clear(); first[0].messages.clear();
             second.recordedPackets.clear(); second.messages.clear();
-            var next = mod.editable(); next.animationTicks = 20;
+            var next = mod.editable(); next.animationTicks = 20; next.actionbarTicks = 0;
             next.pools.get("quota").sProbability = 0; next.pools.get("quota").aProbability = 1;
             mod.saveConfig(next); drop(second, quotaPool[0], Tickets.create(1, 1));
         }));
         helper.runAtTickTime(548, () -> checked(() -> {
             helper.assertTrue(second.packets(ClientboundSetTitleTextPacket.class).isEmpty()
                     && second.challengeSounds() == 0 && first[0].announcements("quota") == 0, "A results do not produce S notifications");
-            var next = mod.editable(); next.pools.get("quota").aProbability = 0;
+            helper.assertTrue(second.packets(ClientboundSetActionBarTextPacket.class).isEmpty(), "zero duration sends no actionbar packets");
+            var next = mod.editable(); next.pools.get("quota").aProbability = 0; next.actionbarTicks = 10;
             mod.saveConfig(next); drop(first[0], quotaPool[0], Tickets.create(1, 1));
         }));
         helper.runAtTickTime(578, () -> checked(() -> {
             helper.assertTrue(first[0].packets(ClientboundSetTitleTextPacket.class).isEmpty()
                     && first[0].challengeSounds() == 0 && second.announcements("quota") == 0, "B results do not produce S notifications");
+            helper.assertTrue(first[0].packets(ClientboundSetActionBarTextPacket.class).size() == 2
+                    && first[0].packets(ClientboundSetActionBarTextPacket.class).getLast().text().getString().isEmpty(),
+                    "short durations end without waiting for the refresh interval");
             leave(first[0]); leave(second); mod.saveConfig(original); helper.succeed();
         }));
     }

@@ -147,7 +147,8 @@ final class GachaCommands {
         root.then(Commands.literal("list").then(poolArgument().executes(c -> safe(c, () -> {
             mod.available(); Pool p = mod.config.pool(text(c, "pool"));
             (fixed ? p.fixedRewards : p.rewards).forEach((tier, list) -> list.forEach(prize -> tell(c.getSource(),
-                    "[" + tier + "] " + prize.id + " · " + prize.label + (fixed ? " · 固定奖励" : " · 权重 " + prize.weight + " · 个人限额 " + prize.limit))));
+                    "[" + tier + "] " + prize.id + " · " + prize.label + (fixed ? " · 固定奖励" : " · 权重 " + prize.weight + " · 个人限额 " + prize.limit)
+                            + (prize.displayItem == null ? "" : " · 独立展示物品"))));
             return 1;
         }))));
         var hand = Commands.literal("sethand"); var handPool = poolArgument();
@@ -185,8 +186,24 @@ final class GachaCommands {
                     })))));
         }
         root.then(hand.then(handPool)).then(command.then(commandPool)).then(remove.then(removePool));
-        if (!fixed) root.then(limit.then(limitPool));
+        if (!fixed) {
+            root.then(limit.then(limitPool));
+            for (String operation : List.of("setdisplay", "cleardisplay")) {
+                root.then(Commands.literal(operation).then(poolArgument().then(Commands.literal("S")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .executes(c -> safe(c, () -> setDisplay(c, operation.equals("cleardisplay"))))))));
+            }
+        }
         return root;
+    }
+    private int setDisplay(CommandContext<CommandSourceStack> c, boolean clear) throws Exception {
+        String pool = text(c, "pool"); mod.requireIdlePool(pool); var config = mod.editable();
+        Prize prize = config.pool(pool).rewards.get(Tier.S).stream().filter(p -> p.id.equals(text(c, "id"))).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("S 级随机奖品不存在。"));
+        prize.displayItem = clear ? null : Rewards.capture(c.getSource().getPlayerOrException()).item;
+        mod.saveConfig(config);
+        tell(c.getSource(), clear ? "独立展示已清除，将使用奖品中的实际物品轮播。" : "主手物品已保存为独立展示，仅供轮播，不会作为奖励发放。");
+        return 1;
     }
     private int setHand(CommandContext<CommandSourceStack> c, Tier tier, boolean fixed, int weight, int limit) throws Exception {
         var player = c.getSource().getPlayerOrException(); Reward r = Rewards.capture(player);

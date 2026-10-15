@@ -17,6 +17,8 @@ class DrawEngineTest {
     }
     @Test void defaultsSeparateRandomAndFixedRewards() throws Exception {
         var config = GachaConfig.defaults(); config.validate();
+        assertEquals(60, config.resultTicks);
+        assertEquals(100, config.actionbarTicks);
         var example = JsonFiles.read(java.nio.file.Path.of("example-config.json"), GachaConfig.class);
         example.validate();
         var rules = config.poolDefaults;
@@ -176,5 +178,36 @@ class DrawEngineTest {
         for (double value : new double[]{0, 3.2, 64}) {
             config.poolDefaults.fireworkDistance = value; config.validate();
         }
+    }
+    @Test void actionbarDurationValidatesAndRoundTrips() {
+        var config = GachaConfig.defaults();
+        for (int ticks : new int[]{0, 1, 100, 1200}) {
+            config.actionbarTicks = ticks; config.validate();
+            assertEquals(ticks, JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(config), GachaConfig.class).actionbarTicks);
+        }
+        for (int ticks : new int[]{-1, 1201}) {
+            config.actionbarTicks = ticks;
+            assertThrows(IllegalArgumentException.class, config::validate);
+        }
+    }
+    @Test void displayItemsAreIndependentCosmeticsAndOnlyBelongToRandomSPrizes() {
+        var config = GachaConfig.defaults();
+        var prize = config.poolDefaults.rewards.get(Tier.S).getFirst();
+        prize.displayItem = com.google.gson.JsonParser.parseString("{\"id\":\"minecraft:clock\",\"count\":1}");
+        config.validate();
+        var first = config.newPool(); var second = config.newPool();
+        assertEquals(prize.displayItem, first.rewards.get(Tier.S).getFirst().displayItem);
+        first.rewards.get(Tier.S).getFirst().displayItem.getAsJsonObject().addProperty("id", "minecraft:paper");
+        assertEquals("minecraft:clock", second.rewards.get(Tier.S).getFirst().displayItem.getAsJsonObject().get("id").getAsString());
+        var batch = DrawEngine.roll(config.poolDefaults, 79, java.util.Map.of(), 1, fixed(.99));
+        assertEquals("minecraft:mace", batch.results().getFirst().prize().rewards.getFirst().item.getAsJsonObject().get("id").getAsString());
+        prize.displayItem = com.google.gson.JsonParser.parseString("[]");
+        assertThrows(IllegalArgumentException.class, config::validate);
+        prize.displayItem = null;
+        config.poolDefaults.fixedRewards.get(Tier.S).getFirst().displayItem = new com.google.gson.JsonObject();
+        assertThrows(IllegalArgumentException.class, config::validate);
+        config.poolDefaults.fixedRewards.get(Tier.S).getFirst().displayItem = null;
+        config.poolDefaults.rewards.get(Tier.A).getFirst().displayItem = new com.google.gson.JsonObject();
+        assertThrows(IllegalArgumentException.class, config::validate);
     }
 }

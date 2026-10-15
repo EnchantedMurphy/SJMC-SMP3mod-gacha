@@ -1,7 +1,8 @@
 {
   "schemaVersion": 2,
   "animationTicks": 100,
-  "resultTicks": 40,
+  "resultTicks": 60,
+  "actionbarTicks": 100,
   "poolDefaults": {
     "sProbability": 0.02,
     "aProbability": 0.1,

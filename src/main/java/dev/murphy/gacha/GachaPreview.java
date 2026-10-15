@@ -21,10 +21,12 @@ final class GachaPreview {
     private int ticks;
 
     GachaPreview(ServerLevel level, Pool pool) {
-        for (Prize prize : pool.rewards.get(Tier.S)) if (prize.limit != 0) for (Reward reward : prize.rewards) {
-            if (reward.item == null) continue;
-            ItemStack item = ItemStack.CODEC.parse(level.registryAccess().createSerializationContext(JsonOps.INSTANCE), reward.item).getOrThrow();
-            if (!item.isEmpty()) items.add(item.copyWithCount(1));
+        for (Prize prize : pool.rewards.get(Tier.S)) if (prize.limit != 0) {
+            if (prize.displayItem != null) {
+                addItem(level, prize.displayItem);
+            } else for (Reward reward : prize.rewards) {
+                if (reward.item != null) addItem(level, reward.item);
+            }
         }
         if (items.isEmpty()) return;
         display = new Display.ItemDisplay(EntityTypes.ITEM_DISPLAY, level);
@@ -36,6 +38,11 @@ final class GachaPreview {
         display.setTransformationInterpolationDuration(2);
         transform();
         if (!level.addFreshEntity(display)) { clear(); throw new IllegalStateException("无法创建 S 级物品展示。"); }
+    }
+    private void addItem(ServerLevel level, com.google.gson.JsonElement json) {
+        ItemStack item = ItemStack.CODEC.parse(level.registryAccess().createSerializationContext(JsonOps.INSTANCE), json).getOrThrow();
+        if (item.isEmpty()) throw new IllegalArgumentException("S 级展示物品不能为空。");
+        items.add(item.copyWithCount(1));
     }
     boolean empty() { return items.isEmpty(); }
     boolean removed() { return display == null || display.isRemoved(); }

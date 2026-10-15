@@ -23,7 +23,8 @@ public final class GachaConfig {
     }
     public int schemaVersion = 2;
     public int animationTicks = 100;
-    public int resultTicks = 40;
+    public int resultTicks = 60;
+    public int actionbarTicks = 100;
     public PoolRules poolDefaults = defaultRules();
     public Map<String, Pool> pools = new LinkedHashMap<>();
 
@@ -70,6 +71,7 @@ public final class GachaConfig {
         public String label;
         public int weight = 1;
         public int limit = -1;
+        public JsonElement displayItem;
         public List<Reward> rewards = new ArrayList<>();
         public static Prize of(String id, String label, Reward... rewards) {
             Prize p = new Prize(); p.id = id; p.label = label; p.rewards.addAll(List.of(rewards)); return p;
@@ -116,6 +118,8 @@ public final class GachaConfig {
         if (schemaVersion != 2) throw new IllegalArgumentException("配置需要使用 2.0 版格式，请替换旧版配置。");
         if (animationTicks < 20 || animationTicks > 1200 || resultTicks < 0 || resultTicks > 1200)
             throw new IllegalArgumentException("动画时长应为 20–1200 tick，结果展示为 0–1200 tick。");
+        if (actionbarTicks < 0 || actionbarTicks > 1200)
+            throw new IllegalArgumentException("actionbar 持续时间应为 0–1200 tick，0 表示关闭。");
         if (pools == null || poolDefaults == null) throw new IllegalArgumentException("缺少 pools 或 poolDefaults。");
         validateRules(poolDefaults);
         for (var entry : pools.entrySet()) {
@@ -156,6 +160,8 @@ public final class GachaConfig {
                             || p.label == null || p.label.isBlank() || p.label.length() > 256 || p.weight < 1 || p.limit < -1)
                         throw new IllegalArgumentException(tier + " 级奖品 ID、名称、权重或限额无效。");
                     total += p.weight;
+                    if (p.displayItem != null && (tier != Tier.S || table != rules.rewards || !p.displayItem.isJsonObject()))
+                        throw new IllegalArgumentException("displayItem 必须是 S 级随机奖品中的物品 JSON 对象：" + p.id);
                     if (p.rewards == null || p.rewards.isEmpty()) throw new IllegalArgumentException("奖品没有奖励：" + p.id);
                     p.rewards.forEach(GachaConfig::validateReward);
                 }
