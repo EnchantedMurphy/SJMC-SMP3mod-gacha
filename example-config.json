@@ -85,7 +85,19 @@
           ]
         }
       ],
-      "A": [],
+      "A": [
+        {
+          "id": "stamps",
+          "label": "咖啡印章 ×2",
+          "weight": 1,
+          "limit": -1,
+          "rewards": [
+            {
+              "command": "economy give %player% fuji:coffee_stamp 2"
+            }
+          ]
+        }
+      ],
       "B": [
         {
           "id": "tongbao",
