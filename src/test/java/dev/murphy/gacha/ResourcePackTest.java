@@ -28,33 +28,26 @@ class ResourcePackTest {
                 SharedConstants.getCurrentVersion().packVersion(PackType.CLIENT_RESOURCES)));
     }
 
-    @Test void ticketSelectorsResolveModelsAndTexturesAndPreservePaperFallback() throws IOException {
-        var model = read(ROOT.resolve("assets/minecraft/items/paper.json")).getAsJsonObject("model");
-        assertEquals("minecraft:select", model.get("type").getAsString());
-        assertEquals("minecraft:custom_model_data", model.get("property").getAsString());
-        assertEquals(0, model.get("index").getAsInt());
-        var fallback = model.getAsJsonObject("fallback");
-        assertEquals("minecraft:model", fallback.get("type").getAsString());
-        assertEquals("minecraft:item/paper", fallback.get("model").getAsString());
-        Set<String> markers = new HashSet<>();
-        Set<Path> textures = new HashSet<>();
-        for (var entry : model.getAsJsonArray("cases")) {
-            var branch = entry.getAsJsonObject();
-            assertTrue(markers.add(branch.get("when").getAsString()));
-            var selected = branch.getAsJsonObject("model");
+    @Test void registeredTicketAssetsResolveAndPackMatchesBundledResources() throws IOException {
+        for (String name : Set.of("ticket_single", "ticket_ten")) {
+            String definitionPath = "assets/smp3/items/" + name + ".json";
+            var selected = read(ROOT.resolve(definitionPath)).getAsJsonObject("model");
             assertEquals("minecraft:model", selected.get("type").getAsString());
-            var definition = read(asset(selected.get("model").getAsString(), "models", ".json"));
+            var modelPath = asset(selected.get("model").getAsString(), "models", ".json");
+            var definition = read(modelPath);
             assertEquals("minecraft:item/generated", definition.get("parent").getAsString());
             var png = asset(definition.getAsJsonObject("textures").get("layer0").getAsString(), "textures", ".png");
-            assertTrue(textures.add(png));
             var image = ImageIO.read(png.toFile());
-            assertNotNull(image, png.toString());
-            assertEquals(image.getWidth(), image.getHeight());
-            assertEquals(1, Integer.bitCount(image.getWidth()), "Texture size must be a power of two");
-            assertTrue(image.getColorModel().hasAlpha());
+            assertNotNull(image); assertEquals(image.getWidth(), image.getHeight());
+            assertEquals(1, Integer.bitCount(image.getWidth()));
+            for (Path path : Set.of(ROOT.resolve(definitionPath), modelPath, png))
+                assertArrayEquals(Files.readAllBytes(path), Files.readAllBytes(Path.of("src/main/resources").resolve(ROOT.relativize(path))));
         }
-        assertEquals(Set.of(Tickets.SINGLE_MODEL, Tickets.TEN_MODEL), markers);
-        assertEquals(2, textures.size());
+        assertFalse(Files.exists(ROOT.resolve("assets/minecraft/items/paper.json")));
+        var translations = read(Path.of("src/main/resources/assets/smp3/lang/zh_cn.json"));
+        assertEquals("SMP3", translations.get("itemGroup.smp3").getAsString());
+        assertEquals("抽奖券", translations.get("item.smp3.ticket_single").getAsString());
+        assertEquals("十连抽奖券", translations.get("item.smp3.ticket_ten").getAsString());
     }
 
     private static Path asset(String id, String directory, String extension) {

@@ -48,11 +48,12 @@ tasks.named('sourcesJar', Jar) {
 def resourcePackName = 'smp3-resourcepack-3.0-alpha-1'
 def resourcePackZip = tasks.register('resourcePackZip', Zip) {
     group = 'build'
-    description = 'Package the optional ticket resource pack with blank texture placeholders.'
+    description = 'Package the optional registered-ticket texture overrides.'
     from("resourcepacks/${resourcePackName}")
     from('LICENSE')
     archiveFileName = "${resourcePackName}.zip"
     destinationDirectory = layout.buildDirectory.dir('resourcepacks')
+    includeEmptyDirs = false
     preserveFileTimestamps = false
     reproducibleFileOrder = true
 }
@@ -81,6 +82,7 @@ fabricApi {
         createSourceSet = true
         modId = 'gacha-test'
         enableGameTests = true
+        enableClientGameTests = true
         eula = true
     }
 }

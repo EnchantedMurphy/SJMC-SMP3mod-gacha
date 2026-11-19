@@ -1,48 +1,52 @@
 package dev.murphy.gacha;
 
+import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.component.CustomData;
-import net.minecraft.world.item.component.CustomModelData;
 import net.minecraft.world.item.component.ItemLore;
 import java.util.List;
 
 public final class Tickets {
-    public static final String SINGLE_MODEL = "gacha:ticket_single";
-    public static final String TEN_MODEL = "gacha:ticket_ten";
+    public static final Item SINGLE = register("ticket_single", false);
+    public static final Item TEN = register("ticket_ten", true);
+    public static final CreativeModeTab SMP3 = Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB,
+            Identifier.fromNamespaceAndPath("smp3", "gacha"), FabricCreativeModeTab.builder()
+                    .title(Component.translatable("itemGroup.smp3"))
+                    .icon(() -> new ItemStack(SINGLE))
+                    .displayItems((parameters, output) -> { output.accept(SINGLE); output.accept(TEN); }).build());
     private Tickets() {}
+
+    /** Called during common initialization, before registries freeze on either side. */
+    public static void initialize() { }
+
+    private static Item register(String name, boolean ten) {
+        var id = ResourceKey.create(Registries.ITEM, Identifier.fromNamespaceAndPath("smp3", name));
+        var usage = Component.translatable("tooltip.smp3.ticket.usage").withStyle(ChatFormatting.GRAY);
+        var properties = new Item.Properties().setId(id)
+                .component(DataComponents.ITEM_NAME, Component.translatable("item.smp3." + name).withStyle(ChatFormatting.GOLD))
+                .component(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
+                .component(DataComponents.LORE, new ItemLore(ten ? List.of(usage,
+                        Component.translatable("tooltip.smp3.ticket.ten_guarantee").withStyle(ChatFormatting.YELLOW)) : List.of(usage)));
+        return Registry.register(BuiltInRegistries.ITEM, id, new Item(properties));
+    }
 
     public static ItemStack create(int draws, int count) {
         if (draws != 1 && draws != 10) throw new IllegalArgumentException("抽奖券类型必须为 single 或 ten。");
-        ItemStack stack = new ItemStack(Items.PAPER, count);
-        CompoundTag tag = new CompoundTag();
-        tag.putInt("gacha_draws", draws);
-        tag.putInt("gacha_version", 1);
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-        // Keep the vanilla paper item model so clients without the optional pack see paper.
-        stack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(
-                List.of(), List.of(), List.of(draws == 10 ? TEN_MODEL : SINGLE_MODEL), List.of()));
-        stack.set(DataComponents.CUSTOM_NAME, Component.literal(draws == 10 ? "十连抽奖券" : "抽奖券")
-                .withStyle(style -> style.withColor(ChatFormatting.GOLD).withItalic(false)));
-        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
-        var usage = Component.literal("投掷到抽奖池内使用").withStyle(ChatFormatting.GRAY);
-        stack.set(DataComponents.LORE, new ItemLore(draws == 10 ? List.of(usage,
-                Component.literal("末抽必为 A 级及以上").withStyle(ChatFormatting.YELLOW)) : List.of(usage)));
-        return stack;
+        return new ItemStack(draws == 10 ? TEN : SINGLE, count);
     }
 
-    /** Recognition uses server-issued custom data, so an anvil rename cannot mint tickets. */
+    /** Item identity is authoritative; paper tickets from earlier versions are rejected. */
     public static int draws(ItemStack stack) {
-        if (stack.isEmpty() || !stack.is(Items.PAPER)) return 0;
-        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
-        if (data == null) return 0;
-        CompoundTag tag = data.copyTag();
-        if (tag.getIntOr("gacha_version", 0) != 1) return 0;
-        int count = tag.getIntOr("gacha_draws", 0);
-        return count == 1 || count == 10 ? count : 0;
+        if (stack.isEmpty()) return 0;
+        return stack.is(SINGLE) ? 1 : stack.is(TEN) ? 10 : 0;
     }
 }

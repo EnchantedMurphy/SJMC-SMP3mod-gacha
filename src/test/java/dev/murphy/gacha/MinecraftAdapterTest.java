@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MinecraftAdapterTest {
     @BeforeAll static void bootstrap() {
-        SharedConstants.tryDetectVersion(); Bootstrap.bootStrap();
+        SharedConstants.tryDetectVersion(); Bootstrap.bootStrap(); Tickets.initialize();
         var lookup = net.minecraft.data.registries.VanillaRegistries.createWorldLookup();
         BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(lookup).forEach(p -> p.apply());
     }
@@ -64,19 +64,22 @@ class MinecraftAdapterTest {
             assertFalse(dispatcher.parse(command, player).getReader().canRead(), command);
     }
 
-    @Test void ticketAppearanceIsOptionalAndCannotForgeTickets() {
+    @Test void registeredTicketsUseSmp3IdsAndRejectLegacyPaper() {
+        assertEquals("smp3:ticket_single", BuiltInRegistries.ITEM.getKey(Tickets.SINGLE).toString());
+        assertEquals("smp3:ticket_ten", BuiltInRegistries.ITEM.getKey(Tickets.TEN).toString());
+        assertEquals("smp3:gacha", BuiltInRegistries.CREATIVE_MODE_TAB.getKey(Tickets.SMP3).toString());
         for (int draws : List.of(1, 10)) {
             var ticket = Tickets.create(draws, 2);
-            var appearance = ticket.get(DataComponents.CUSTOM_MODEL_DATA);
-            assertNotNull(appearance);
-            assertEquals(List.of(draws == 10 ? Tickets.TEN_MODEL : Tickets.SINGLE_MODEL), appearance.strings());
-            assertEquals(appearance, ticket.copy().get(DataComponents.CUSTOM_MODEL_DATA));
-            assertEquals(new ItemStack(Items.PAPER).get(DataComponents.ITEM_MODEL), ticket.get(DataComponents.ITEM_MODEL));
-            var fake = new ItemStack(Items.PAPER);
-            fake.set(DataComponents.CUSTOM_MODEL_DATA, appearance);
-            assertEquals(0, Tickets.draws(fake));
-            ticket.remove(DataComponents.CUSTOM_MODEL_DATA);
-            assertEquals(draws, Tickets.draws(ticket));
+            assertEquals(draws, Tickets.draws(ticket.copy()));
+            assertNull(ticket.get(DataComponents.CUSTOM_DATA));
+            assertNull(ticket.get(DataComponents.CUSTOM_MODEL_DATA));
+            assertEquals(Boolean.TRUE, ticket.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE));
+            assertEquals(64, ticket.getMaxStackSize());
+            var tag = new net.minecraft.nbt.CompoundTag();
+            tag.putInt("gacha_version", 1); tag.putInt("gacha_draws", draws);
+            var old = new ItemStack(Items.PAPER);
+            old.set(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+            assertEquals(0, Tickets.draws(old));
         }
     }
 }

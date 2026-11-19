@@ -1,29 +1,29 @@
-# Gacha — Fabric 服务端抽奖模组
+# Gacha — Fabric 抽奖模组
 
 ## 功能与特点
 
 Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽奖券投进指定区域，就能观看抽奖动画并获得奖励，适合活动奖池、商店抽奖和限定物品发放。
 
-- **客户端无需安装模组**：使用原版物品和展示效果，可搭配服务端资源包为单抽券和十连券设置独立贴图。
+- **SMP3 独立抽奖券**：单抽券和十连券为正式物品，自带贴图与附魔流光，收录在创造模式的 SMP3 分组；客户端和服务端均需安装。
 - **多个独立奖池**：抽奖券通用，各池的奖励、概率、个人历史和保底独立。
 - **单抽与十连**：支持 S／A／B 三个等级、S 保底和十连末抽 A 级及以上保障。
 - **灵活配奖**：支持物品、后台指令、固定额外奖励，以及每名玩家独立的奖品获取次数限制。
 - **可见的抽奖体验**：三色方块动画、音乐、烟花和 S 级物品旋转轮播；出 S 时个人大字幕与音效强调、全服播报，历史可翻页查看。
 - **奖励记录可追踪**：断线后可继续领取，异常奖励可由管理员核查处理。
 
-适用于 **Minecraft Java 26.3 · Fabric**，当前模组版本 **2.3.2**。各版本的改动与更新注意事项见 [版本更新记录](CHANGELOG.md)。
+适用于 **Minecraft Java 26.3 · Fabric**，当前模组版本 **3.0.0**。各版本的改动与更新注意事项见 [版本更新记录](CHANGELOG.md)。
 
 ## 快速上手
 
 ### 普通玩家
 
-从管理员或商店获得抽奖券后，**将券投掷到抽奖池区域内**，等待约 5 秒领取奖励。单抽券抽 1 次，十连券抽 10 次；所有奖池使用同样的券。
+先在客户端安装与服务器相同版本的 Gacha、Fabric Loader 和 Fabric API。从管理员或商店获得抽奖券后，**将券投掷到抽奖池区域内**，等待约 5 秒领取奖励。单抽券抽 1 次，十连券抽 10 次；所有奖池使用同样的券。
 
 开始抽奖提示显示在快捷栏上方的 actionbar，默认持续到约 5 秒后的结果揭晓。抽到 S 级时，中奖玩家会看到红色大字幕并听到专属音效，全服聊天栏同时播报中奖玩家、奖池和 S 级奖品。
 
 整叠投入只使用 1 张，其余退回；奖池或玩家正在抽奖时，新投入的券也会退回。
 
-服务器提供资源包时，接受下载即可看到专属抽奖券贴图；未加载时显示为原版纸，使用方式相同。
+抽奖券贴图已随模组内置，无需额外下载资源包。创造模式可从 **SMP3** 分组获取两种券；旧版纸质抽奖券已失效，请换用新券。
 
 | 想做什么 | 操作或指令 |
 | --- | --- |
@@ -37,7 +37,7 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 
 ### OP 常用操作
 
-**先准备服务器：** 安装 Fabric 26.3、Java 25 和匹配的 Fabric API，把 `gacha-26.3-fabric-2.3.2.jar` 放入服务器 `mods` 目录后启动。
+**先准备服务器：** 安装 Fabric 26.3、Java 25 和匹配的 Fabric API，把 `gacha-26.3-fabric-3.0.0.jar` 分别放入服务器和每位玩家客户端的 `mods` 目录后启动。
 
 默认奖励中含 Fuji 货币指令，需要安装匹配的 Fuji、启用 `economy`，并配置 `fuji:coffee_stamp` 和 `fuji:tongbao`。不使用 Fuji 时，先将这些奖励改成物品或其他可执行指令，再开放抽奖。
 
@@ -87,45 +87,41 @@ Gacha 为 Minecraft 服务器提供可配置的投券抽奖玩法。玩家把抽
 
 **`poolDefaults` 只用于创建新池时复制设置。** 修改已有池请改 `pools.<池名>`；修改模板不会改变已有池。完整结构可参考 [示例配置](example-config.json)，字段边界和奖励写法见下文。
 
-**可选抽奖券材质：** 项目附带 `smp3-resourcepack-3.0-alpha-1` 资源包。先替换其中两张透明占位贴图，再打包上传，在服务器 `server.properties` 中设置 `resource-pack` 与 `resource-pack-sha1`，详见下文“抽奖券资源包”。这些字段属于原版服务器配置，不写入 Gacha 配置。
+**抽奖券物品：** 单抽券为 `smp3:ticket_single`，十连券为 `smp3:ticket_ten`；创造分组显示为 SMP3（分组 ID 为 `smp3:gacha`）。可继续使用 `/gacha give`，或用原版 `/give Steve smp3:ticket_single 1`、`/give Steve smp3:ticket_ten 1` 发券。
 
 ## 进阶配置与完整指令
 
-### 抽奖券资源包
+### 抽奖券物品与材质
 
-资源包源文件位于 [resourcepacks/smp3-resourcepack-3.0-alpha-1](resourcepacks/smp3-resourcepack-3.0-alpha-1/README.md)，适配 Minecraft Java **26.3**，资源包格式 **97.1**。模组仍只需安装在服务端，玩家通过原版客户端下载资源包即可使用贴图。
+| 物品 | 注册 ID | 默认堆叠上限 |
+| --- | --- | --- |
+| 单抽券 | `smp3:ticket_single` | 64 |
+| 十连券 | `smp3:ticket_ten` | 64 |
 
-**先填写两张贴图：** 当前均为合法的 **32×32 全透明 PNG 占位图**，可替换为 32×32、64×64 等正方形 PNG，保留以下路径和文件名：
+两种券均属于创造模式的 **SMP3** 分组，自带名称、使用说明、附魔流光及贴图。直接从创造栏、原版 `/give` 或 `/gacha give` 获取的券均可使用。识别依据为注册物品 ID，改名和复制完整物品不会改变券类型。
 
-| 类型 | 相对资源包根目录的贴图路径 |
+客户端和服务端必须安装相同版本的 Gacha 及匹配的 Fabric API。无需专用服务器资源包即可显示材质。模组内置资源位于 `src/main/resources/assets/smp3/`：
+
+| 类型 | 贴图路径 |
 | --- | --- |
-| 单抽券 | `assets/gacha/textures/item/ticket_single.png` |
-| 十连券 | `assets/gacha/textures/item/ticket_ten.png` |
+| 单抽券 | `assets/smp3/textures/item/ticket_single.png` |
+| 十连券 | `assets/smp3/textures/item/ticket_ten.png` |
 
-加载尚未填写贴图的资源包后，券图案会不可见，名称、说明和投券功能不变。正式开放前请先替换贴图。
+客户端资源包可覆盖以上两张 PNG，16×16、32×32 等尺寸均可，保持路径和文件名即可。物品定义为 `assets/smp3/items/ticket_single.json`、`ticket_ten.json`，模型为 `assets/smp3/models/item/` 中的同名文件；不再修改原版纸的模型，也不依赖 `custom_model_data`。
 
-**打包与配置：** 在项目根目录执行 `gradlew.bat resourcePackSha1`（完整 `build` 也会生成），得到：
+项目保留 [smp3-resourcepack-3.0-alpha-1](resourcepacks/smp3-resourcepack-3.0-alpha-1/README.md) 作为可选材质覆盖包，适配 Minecraft Java 26.3 的资源包格式 97.1。修改该目录的贴图后执行 `gradlew.bat resourcePackSha1`，会生成 `build/resourcepacks/smp3-resourcepack-3.0-alpha-1.zip` 及 `.zip.sha1`；完整 `build` 也会生成。模组内置贴图与此目录独立保存，修改内置贴图需重建模组。
 
-```text
-build/resourcepacks/smp3-resourcepack-3.0-alpha-1.zip
-build/resourcepacks/smp3-resourcepack-3.0-alpha-1.zip.sha1
-```
-
-将 ZIP 上传到玩家可直接下载的 HTTP／HTTPS 地址。编辑服务端 `server.properties`，例如：
+若通过服务器下发覆盖包，把 ZIP 上传至玩家可直接下载的地址，并设置原版 `server.properties`：
 
 ```properties
 resource-pack=https://example.com/smp3-resourcepack-3.0-alpha-1.zip
-resource-pack-sha1=<替换为生成的 .zip.sha1 文件中的 40 位校验值>
+resource-pack-sha1=<替换为最终 ZIP 的 40 位 SHA-1>
 require-resource-pack=false
 ```
 
-示例域名和校验值需换成自己的实际内容，不保留尖括号。`require-resource-pack=false` 允许玩家拒绝资源包；设为 `true` 则必须接受才能游玩。ZIP 根目录应直接包含 `pack.mcmeta` 和 `assets/`，不要再套一层文件夹。资源包不放入 `mods` 或世界的 `datapacks`。
+替换示例地址与校验值，ZIP 根目录直接包含 `pack.mcmeta` 和 `assets/`。每次修改后重新打包、上传并更新 SHA-1，重启服务器并让玩家重新连接；`/gacha reload` 仅重载抽奖配置。资源包用于替换外观，玩家仍需安装模组。
 
-重启服务器并让玩家重新连接以应用设置，`/gacha reload` 只重载 Gacha 配置。每次替换贴图后，都重新打包、上传 ZIP 并更新 SHA-1；校验值针对整个 ZIP，而非某一张图片。需要手动压缩时，也请重新计算最终 ZIP 的 SHA-1。
-
-**新旧券与商店：** 2.3.0 起新发放的券自动携带材质标识。旧券仍能抽奖，但显示原版纸；需要新外观时重新发券。商店复制券时同时保留 `minecraft:custom_data` 和 `minecraft:custom_model_data`；后者仅控制外观，单独添加它不能生成有效券。未加载此包时，新券也显示原版纸。
-
-**与已有资源包合并：** 此包使用 `assets/minecraft/items/paper.json` 按 `minecraft:custom_model_data` 的 `strings[0]` 选择模型；单抽标识为 `gacha:ticket_single`，十连为 `gacha:ticket_ten`，普通纸回退到原版模型。如果服务器已有资源包，将 `assets/gacha/` 合入原包，并合并纸模型中的选择分支与回退规则，避免覆盖其他纸类道具的模型；最终发布一个 ZIP，并使用其新的 SHA-1。
+**由 2.x 升级：** 旧版纸质券不再识别，不自动转换。请重新配置商店、活动与其他发券渠道，使用新物品 ID 或 `/gacha give`。有效的抽奖配置、玩家历史、保底和限额数据可保留；旧券的改名、附魔或材质标识无法使其成为新券。
 
 ### 抽奖规则、固定奖励与限额
 
@@ -336,7 +332,7 @@ execute in minecraft:overworld run gacha pool set main 100 64 100 103 66 103
 
 ### 安装、版本与数据目录
 
-环境要求：Minecraft Java **26.3**、**Java 25**、Fabric Loader **0.19.5 或更新**、匹配的 Fabric API。当前构建使用 Fabric API `0.161.0+26.3`、Loom `1.17.21`、Gradle `9.7.1`；客户端无需安装本模组。
+环境要求：Minecraft Java **26.3**、**Java 25**、Fabric Loader **0.19.5 或更新**、匹配的 Fabric API。当前构建使用 Fabric API `0.161.0+26.3`、Loom `1.17.21`、Gradle `9.7.1`；客户端和服务端必须安装相同版本的本模组及匹配的 Fabric API。
 
 服务器目录：
 
@@ -384,7 +380,7 @@ gacha give <商店的玩家名占位符> single 1
 gacha give <商店的玩家名占位符> ten 1
 ```
 
-替换为商店支持的实际占位符。商店复制券物品时必须保留 `minecraft:custom_data`，使用专属贴图时也需保留 `minecraft:custom_model_data`；仅保存显示名称无法生成有效券。
+替换为商店支持的实际占位符。商店应保存注册物品 ID `smp3:ticket_single` 或 `smp3:ticket_ten`，或直接执行 `/gacha give`；不再依赖纸的 `custom_data` 或 `custom_model_data`。
 
 ### 开发与验证
 
@@ -396,7 +392,7 @@ gradlew.bat build
 
 服务端游戏测试还检查原版 actionbar 的刷新、到期清除、关闭和揭晓上限，大字幕与音效包的接收范围、S 级全服播报、十连合并及离线重领不重复提示，以及指令奖品的独立轮播、主手设置／清除和展示不参与发奖。
 
-构建同时生成主 JAR、源码 JAR 和独立资源包 ZIP／SHA-1。资源包打包使用固定时间戳与文件顺序；另有测试校验 Minecraft 原生资源包元数据、券材质标识、普通纸回退及模型和贴图引用。
+构建同时生成主 JAR、源码 JAR 和独立资源包 ZIP／SHA-1。资源包打包使用固定时间戳与文件顺序；另有测试校验 Minecraft 原生资源包元数据、注册物品 ID、旧券拒绝及模型和贴图引用。
 
 真实 Fuji 集成测试使用其官方 `14.12.0` 的 26.3 JAR，放入 `integration/` 后运行：
 
@@ -405,6 +401,8 @@ gradlew.bat build
 ```
 
 默认同时开启 advice 和 cooldown。可分别使用 `-CommandHooks none`、`advice`、`cooldown`、`both` 测试不同组合。测试服只监听本机临时端口，数据位于 `build/run/fujiIntegration`，结果写入 `fuji-test-result.json`；验证实际余额、物品、领取状态及失败/取消指令。
+
+客户端测试执行 `gradlew.bat runClientGameTest`，覆盖客户端物品模型、SMP3 分组、原版发券和集成服务器的 `/gacha give`。
 
 生产 JAR 不包含测试入口和测试服务器数据。服务端测试验证实体与网络效果；客户端画面和声音听感仍需进服验收。
 

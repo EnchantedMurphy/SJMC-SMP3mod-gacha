@@ -3,11 +3,24 @@
   "id": "gacha",
   "version": "${version}",
   "name": "gacha",
-  "description": "Server-side gacha tickets, per-player pity, history and vanilla display animations.",
+  "description": "Gacha with registered SMP3 tickets, independent pools, pity and animated rewards. Required on client and server.",
   "license": "GPL-3.0-only",
-  "environment": "server",
-  "entrypoints": {"server": ["dev.murphy.gacha.GachaMod"]},
-  "mixins": ["gacha.mixins.json"],
-  "depends": {"fabricloader": ">=0.19.5", "minecraft": "26.3", "java": ">=25", "fabric-api": "*"},
-  "suggests": {"fuji": "*"}
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.murphy.gacha.GachaMod"
+    ]
+  },
+  "mixins": [
+    "gacha.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "fuji": "*"
+  }
 }

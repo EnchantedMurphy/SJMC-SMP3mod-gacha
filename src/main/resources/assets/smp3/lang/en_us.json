@@ -1,0 +1,7 @@
+{
+  "item.smp3.ticket_single": "Gacha Ticket",
+  "item.smp3.ticket_ten": "Ten-Draw Gacha Ticket",
+  "tooltip.smp3.ticket.usage": "Throw into a gacha pool to use",
+  "tooltip.smp3.ticket.ten_guarantee": "The final draw guarantees A tier or above",
+  "itemGroup.smp3": "SMP3"
+}

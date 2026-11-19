@@ -2,7 +2,7 @@ package dev.murphy.gacha;
 
 import com.mojang.serialization.JsonOps;
 import dev.murphy.gacha.mixin.ThrowerAccess;
-import net.fabricmc.api.DedicatedServerModInitializer;
+import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -42,7 +42,7 @@ import java.util.UUID;
 import java.util.random.RandomGenerator;
 import static dev.murphy.gacha.GachaConfig.*;
 
-public final class GachaMod implements DedicatedServerModInitializer {
+public final class GachaMod implements ModInitializer {
     static final Logger LOGGER = LoggerFactory.getLogger("gacha");
     private static GachaMod active;
     GachaConfig config;
@@ -71,7 +71,8 @@ public final class GachaMod implements DedicatedServerModInitializer {
         GachaAnimation animation;
     }
 
-    @Override public void onInitializeServer() {
+    @Override public void onInitialize() {
+        Tickets.initialize();
         CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) -> new GachaCommands(this).register(dispatcher));
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
             active = this;
